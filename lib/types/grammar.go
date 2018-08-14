@@ -44,6 +44,7 @@ type Grammar struct {
     Morphisms []Morphism
     Models map[string]Model
     Run []MainModel
+    Sequence string
 }
 
 func LoadGrammar(grammar []byte) (error, Grammar) {

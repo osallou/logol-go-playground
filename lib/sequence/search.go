@@ -16,11 +16,12 @@ func Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model 
 
 func FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
     // TODO find only non overlapping, func for testing only
+    seq := Sequence{grammar.Sequence, 0, ""}
     curVariable := grammar.Models[model].Vars[modelVariable]
     if (curVariable.Value == "" &&
         curVariable.String_constraints.Content != "") {
         contentConstraint := curVariable.String_constraints.Content
-        curVariable.Value = GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
+        curVariable.Value = seq.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
         if curVariable.Value == "" {
             close(mch)
             return
@@ -30,7 +31,7 @@ func FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, m
     log.Printf("Search %s at min pos %d, spacer: %t", curVariable.Value, match.MinPosition, spacer)
 
     r, _ := regexp.Compile("(" + curVariable.Value + ")")
-    sequence := GetSequence()
+    sequence := seq.GetSequence()
     findResults := r.FindAllStringIndex(sequence, -1)
     ban := 0
     for _, findResult := range findResults {

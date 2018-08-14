@@ -112,6 +112,130 @@ func NewMsgHandler(host string, port int, user string, password string) MsgHandl
     return msgHandler
 }
 
+func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
+    connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
+        h.User, h.Password, h.Hostname, h.Port)
+    conn, err := amqp.Dial(connUrl)
+    failOnError(err, "Failed to connect to RabbitMQ")
+    defer conn.Close()
+
+    ch, err := conn.Channel()
+    failOnError(err, "Failed to open a channel")
+    defer ch.Close()
+
+    q, rqerr := ch.QueueDeclare(
+      "logol-cassie-" + queueName, // name
+      false,   // durable
+      false,   // delete when usused
+      false,   // exclusive
+      false,   // no-wait
+      nil,     // arguments
+    )
+
+    failOnError(rqerr, "Failed to declare a queue")
+
+    err = ch.ExchangeDeclare(
+      "logol-event-exchange-" + queueName, // name
+      "fanout",  // kind
+      false,   // durable
+      false,   // delete when usused
+      false,   // exclusive
+      false,   // no-wait
+      nil,     // arguments
+    )
+
+    failOnError(err, "Failed to declare an exchange")
+
+    eventQueue, err := ch.QueueDeclare(
+        "",
+        false,   // durable
+        false,   // delete when usused
+        true,   // exclusive
+        false,   // no-wait
+        nil,     // arguments
+    )
+
+    failOnError(err, "Failed to declare a queue")
+
+    err = ch.QueueBind(
+        eventQueue.Name, // name,
+        "", // key
+        "logol-event-exchange-" + queueName,  // exchange
+        false, // no-wait
+        nil, // arguments
+    )
+
+    failOnError(err, "Failed to bind queue")
+
+    err = ch.Qos(
+      1,     // prefetch count
+      0,     // prefetch size
+      false, // global
+    )
+    failOnError(err, "Failed to set QoS")
+
+    msgs, err := ch.Consume(
+      q.Name, // queue
+      "",     // consumer
+      false,   // auto-ack
+      false,  // exclusive
+      false,  // no-local
+      false,  // no-wait
+      nil,    // args
+    )
+    failOnError(err, "Failed to register a consumer")
+
+    events, err := ch.Consume(
+      eventQueue.Name, // queue
+      "",     // consumer
+      false,   // auto-ack
+      false,  // exclusive
+      false,  // no-local
+      false,  // no-wait
+      nil,    // args
+    )
+    failOnError(err, "Failed to register a consumer")
+
+    msgManager := NewMsgManager("localhost", ch, "test")
+
+    forever := make(chan bool)
+
+    go func() {
+
+        for d := range msgs {
+            log.Printf("Received a message: %s", string(d.Body[:]))
+            result, err := msgManager.get(string(d.Body[:]))
+            if err != nil {
+                log.Printf("Failed to get message")
+                d.Ack(false)
+                continue
+            }
+            log.Printf("Cassie request %s", result.Uid)
+            d.Ack(false)
+        }
+    }()
+
+    go func() {
+      for d := range events {
+        log.Printf("Received an event: %s", d.Body)
+        msgEvent := MsgEvent{}
+        json.Unmarshal([]byte(d.Body), &msgEvent)
+        switch msgEvent.Step {
+            case STEP_END:
+                log.Printf("Received exit request")
+                d.Ack(false)
+                os.Exit(0)
+            default:
+                d.Ack(false)
+        }
+      }
+    }()
+
+
+    log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+    <-forever
+}
+
 func (h MsgHandler) Results(queueName string, fn MsgCallback) {
     connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
         h.User, h.Password, h.Hostname, h.Port)

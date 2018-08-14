@@ -5,7 +5,10 @@ import (
         "fmt"
         "log"
         "encoding/json"
+        "os"
+        "os/signal"
         "strconv"
+        "syscall"
         "time"
         //"gopkg.in/yaml.v2"
         "github.com/streadway/amqp"
@@ -77,6 +80,8 @@ run:
  - model: mod2
    param:
      - R8
+
+sequence: sequence.txt
 `
 
 func main() {
@@ -152,6 +157,29 @@ func main() {
     )
 
     notOver := true
+
+    c := make(chan os.Signal, 1)
+    signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+    go func(){
+        <- c
+        log.Printf("Interrupt signal, exiting")
+        publish_msg := amqp.Publishing{}
+        msg := logol.Event{}
+        msg.Step = msgHandler.STEP_END
+        exit_msg, _ := json.Marshal(msg)
+        publish_msg.Body = []byte(exit_msg)
+        ch.Publish(
+            "logol-event-exchange-test", // exchange
+            "", // key
+            false, // mandatory
+            false, // immediate
+            publish_msg,
+        )
+        notOver = false
+
+    }()
+
+
     for notOver {
         rcount, _ := redisClient.Get("logol:" + data.Uid + ":count").Result()
         count, _ := strconv.Atoi(rcount)
