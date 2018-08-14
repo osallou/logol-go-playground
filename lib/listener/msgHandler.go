@@ -17,66 +17,6 @@ const STEP_POST int = 1
 const STEP_END int = 2
 const STEP_BAN int = 3
 
-/*
-var grammar = `
-morphisms:
-  - foo:
-    - a
-    - g
-models:
-  mod2:
-    comment: 'mod2(+R2)'
-    start: 'var1'
-    param:
-      - R2
-    vars:
-        var1:
-            value: null
-            string_constraints:
-                content: 'R2'
-            next: null
-
-
-  mod1:
-   comment: 'mod1(-R1)'
-   param:
-     - 'R1'
-   start: 'var1'
-   vars:
-     var1:
-         value: 'cc'
-         next:
-           - var2
-     var2:
-         value: 'aaa'
-         string_constraints:
-             saveas: 'R1'
-         next:
-          - var3
-          - var4
-     var3:
-         value: null
-         string_constraints:
-           content: 'R1'
-         next:
-           - var5
-     var4:
-         comments: 'mod2(+R1)'
-         value: null
-         model:
-             name: 'mod2'
-             param:
-               - R1
-         next:
-           - var5
-     var5:
-         value: 'cgt'
-         next: null
-
-run:
- - mod1
-`
-*/
 
 func failOnError(err error, msg string) {
   if err != nil {
@@ -198,19 +138,55 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
 
     msgManager := NewMsgManager("localhost", ch, "test")
 
+    grammars := make(map[string]logol.Grammar)
+
     forever := make(chan bool)
 
     go func() {
 
         for d := range msgs {
-            log.Printf("Received a message: %s", string(d.Body[:]))
             result, err := msgManager.get(string(d.Body[:]))
             if err != nil {
                 log.Printf("Failed to get message")
                 d.Ack(false)
                 continue
             }
-            log.Printf("Cassie request %s", result.Uid)
+            // Get grammar
+            g, ok := grammars[result.Uid]
+            if ! ok {
+                log.Printf("Load grammar not in cache, loading %s", result.Uid)
+                grammar, err := msgManager.Client.Get("logol:" + result.Uid + ":grammar").Result()
+                if grammar == "" {
+                    log.Printf("Failed to get grammar %s", result.Uid)
+                    msgManager.Client.Incr("logol:" + result.Uid + ":ban")
+                    d.Ack(false)
+                    continue
+                }
+                err, g := logol.LoadGrammar([]byte(grammar))
+                if err != nil {
+                        log.Fatalf("error: %v", err)
+                }
+                msgManager.Grammar = g
+                grammars[result.Uid] = g
+            }else {
+                log.Printf("Load grammar from cache %s", result.Uid)
+                msgManager.Grammar = g
+            }
+
+
+            log.Printf("Received message: %s", result.MsgTo)
+            // TODO to remove, for debug only
+            json_msg, _ := json.Marshal(result)
+            log.Printf("#DEBUG# %s", json_msg)
+            now := time.Now()
+            start_time := now.UnixNano()
+            now = time.Now()
+            log.Printf("Received:Model:%s:Variable:%s", result.Model, result.ModelVariable)
+            msgManager.handleMessage(result)
+            end_time := now.UnixNano()
+            duration := end_time - start_time
+            sendStats(result.Model, result.ModelVariable, duration)
+            // json.Unmarshal([]byte(d.Body), &result)
             d.Ack(false)
         }
     }()

@@ -149,13 +149,21 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
     }
 }
 
-func (m msgManager) sendMessage(model string, modelVariable string, data logol.Result, over bool) {
-    // Send current result to specified component or to result queue if over is true (meaning a full match)
+func (m msgManager) publishMessage(queue string, msg amqp.Publishing){
+    m.Ch.Publish(
+        "", // exchange
+        queue, // key
+        false, // mandatory
+        false, // immediate
+        msg,
+    )
+}
+func (m msgManager) prepareMessage(model string, modelVariable string, data logol.Result) (publish_msg amqp.Publishing){
     u1 := uuid.Must(uuid.NewV4())
     sort.Slice(data.Matches, func(i, j int) bool {
         return data.Matches[i].Start < data.Matches[j].Start
     })
-    publish_msg := amqp.Publishing{}
+    publish_msg = amqp.Publishing{}
     publish_msg.Body = []byte(u1.String())
 
     data.MsgTo = "logol-" + model + "-" + modelVariable
@@ -167,24 +175,19 @@ func (m msgManager) sendMessage(model string, modelVariable string, data logol.R
     if err != nil{
         failOnError(err, "Failed to store message")
     }
+    return publish_msg
+}
+func (m msgManager) sendMessage(model string, modelVariable string, data logol.Result, over bool) {
+    // Send current result to specified component or to result queue if over is true (meaning a full match)
 
+    publish_msg := m.prepareMessage(model, modelVariable, data)
 
     if over {
-        m.Ch.Publish(
-            "", // exchange
-            "logol-result-" + m.Chuid, // key
-            false, // mandatory
-            false, // immediate
-            publish_msg,
-        )
+        m.publishMessage("logol-result-" + m.Chuid, publish_msg)
+
     } else {
-        m.Ch.Publish(
-            "", // exchange
-            "logol-analyse-" + m.Chuid, // key
-            false, // mandatory
-            false, // immediate
-            publish_msg,
-        )
+        m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
+
     }
     log.Printf("Sent message to %s", data.MsgTo)
 
@@ -323,8 +326,14 @@ func (m msgManager) handleMessage(result logol.Result) {
 
         result.Spacer = false
         nbMatches := 0
+        toForward := false
         //for _,match := range matches {
         for match := range matchChannel {
+            // Fake match to indicate that match should be forwarded to cassie queue, doing nothing here
+            if match.Id == "" {
+                toForward = true
+                continue
+            }
             nbMatches += 1
             result.From = make([]string, 0)
             for _, from := range prevFrom {
@@ -342,6 +351,11 @@ func (m msgManager) handleMessage(result logol.Result) {
                 log.Printf("SaveAs:%s", json_msg)
             }
             m.go_next(model, modelVariable, result)
+        }
+        if toForward {
+            publish_msg := m.prepareMessage(model, modelVariable, result)
+            m.publishMessage("logol-cassie-" + m.Chuid, publish_msg)
+            return
         }
         if nbMatches == 0 {
             m.Client.Incr("logol:" + result.Uid + ":ban")
