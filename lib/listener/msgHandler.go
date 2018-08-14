@@ -1,0 +1,405 @@
+package logol
+
+import (
+  "fmt"
+  "log"
+  "os"
+  "encoding/json"
+  "time"
+  "github.com/streadway/amqp"
+  logol "org.irisa.genouest/logol/lib/types"
+)
+
+const STEP_NONE int = -1
+const STEP_PRE int = 0
+const STEP_POST int = 1
+const STEP_END int = 2
+const STEP_BAN int = 3
+
+var grammar = `
+morphisms:
+  - foo:
+    - a
+    - g
+models:
+  mod2:
+    comment: 'mod2(+R2)'
+    start: 'var1'
+    param:
+      - R2
+    vars:
+        var1:
+            value: null
+            string_constraints:
+                content: 'R2'
+            next: null
+
+
+  mod1:
+   comment: 'mod1(-R1)'
+   param:
+     - 'R1'
+   start: 'var1'
+   vars:
+     var1:
+         value: 'cc'
+         next:
+           - var2
+     var2:
+         value: 'aaa'
+         string_constraints:
+             saveas: 'R1'
+         next:
+          - var3
+          - var4
+     var3:
+         value: null
+         string_constraints:
+           content: 'R1'
+         next:
+           - var5
+     var4:
+         comments: 'mod2(+R1)'
+         value: null
+         model:
+             name: 'mod2'
+             param:
+               - R1
+         next:
+           - var5
+     var5:
+         value: 'cgt'
+         next: null
+
+run:
+ - mod1
+`
+
+
+func failOnError(err error, msg string) {
+  if err != nil {
+    log.Fatalf("%s: %s", msg, err)
+    panic(fmt.Sprintf("%s: %s", msg, err))
+  }
+}
+
+type MsgEvent struct {
+    Step  int
+}
+
+
+type MsgHandler struct {
+    Hostname string
+    Port int
+    User string
+    Password string
+}
+
+type MsgCallback func([]byte) bool
+
+func NewMsgHandler(host string, port int, user string, password string) MsgHandler {
+    msgHandler := MsgHandler{}
+    msgHandler.Hostname = host
+    msgHandler.Port = 5672
+    msgHandler.User = "guest"
+    msgHandler.Password = "guest"
+    if user != "" {
+        msgHandler.User = user
+        msgHandler.Password = password
+    }
+    return msgHandler
+}
+
+func (h MsgHandler) Results(queueName string, fn MsgCallback) {
+    connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
+        h.User, h.Password, h.Hostname, h.Port)
+    conn, err := amqp.Dial(connUrl)
+    failOnError(err, "Failed to connect to RabbitMQ")
+    defer conn.Close()
+
+    ch, err := conn.Channel()
+    failOnError(err, "Failed to open a channel")
+    defer ch.Close()
+
+    q, rqerr := ch.QueueDeclare(
+      "logol-result-" + queueName, // name
+      false,   // durable
+      false,   // delete when usused
+      false,   // exclusive
+      false,   // no-wait
+      nil,     // arguments
+    )
+
+    failOnError(rqerr, "Failed to declare a queue")
+
+    err = ch.ExchangeDeclare(
+      "logol-event-exchange-" + queueName, // name
+      "fanout",  // kind
+      false,   // durable
+      false,   // delete when usused
+      false,   // exclusive
+      false,   // no-wait
+      nil,     // arguments
+    )
+
+    failOnError(err, "Failed to declare an exchange")
+
+    eventQueue, err := ch.QueueDeclare(
+        "",
+        false,   // durable
+        false,   // delete when usused
+        true,   // exclusive
+        false,   // no-wait
+        nil,     // arguments
+    )
+
+    failOnError(err, "Failed to declare a queue")
+
+    err = ch.QueueBind(
+        eventQueue.Name, // name,
+        "", // key
+        "logol-event-exchange-" + queueName,  // exchange
+        false, // no-wait
+        nil, // arguments
+    )
+
+    failOnError(err, "Failed to bind queue")
+
+    err = ch.Qos(
+      1,     // prefetch count
+      0,     // prefetch size
+      false, // global
+    )
+    failOnError(err, "Failed to set QoS")
+
+    msgs, err := ch.Consume(
+      q.Name, // queue
+      "",     // consumer
+      false,   // auto-ack
+      false,  // exclusive
+      false,  // no-local
+      false,  // no-wait
+      nil,    // args
+    )
+    failOnError(err, "Failed to register a consumer")
+
+    events, err := ch.Consume(
+      eventQueue.Name, // queue
+      "",     // consumer
+      false,   // auto-ack
+      false,  // exclusive
+      false,  // no-local
+      false,  // no-wait
+      nil,    // args
+    )
+    failOnError(err, "Failed to register a consumer")
+
+    forever := make(chan bool)
+
+
+    msgManager := NewMsgManager("localhost", ch, "test")
+
+    go func() {
+        file, err := os.Create("logol." + queueName + ".out")
+        failOnError(err, "Failed to create output file")
+        defer file.Close()
+
+        for d := range msgs {
+            log.Printf("Received a message: %s", string(d.Body[:]))
+            result, err := msgManager.get(string(d.Body[:]))
+            if err != nil {
+                log.Printf("Failed to get message")
+                d.Ack(false)
+                continue
+            }
+            matches, _ := json.Marshal(result.Matches)
+            fmt.Fprintln(file, "", string(matches))
+            log.Printf("%s", matches)
+            d.Ack(false)
+        }
+    }()
+
+    go func() {
+      for d := range events {
+        log.Printf("Received an event: %s", d.Body)
+        msgEvent := MsgEvent{}
+        json.Unmarshal([]byte(d.Body), &msgEvent)
+        switch msgEvent.Step {
+            case STEP_END:
+                log.Printf("Received exit request")
+                d.Ack(false)
+                os.Exit(0)
+            default:
+                d.Ack(false)
+        }
+      }
+    }()
+
+
+    log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+    <-forever
+}
+
+
+func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
+    connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
+        h.User, h.Password, h.Hostname, h.Port)
+    conn, err := amqp.Dial(connUrl)
+    failOnError(err, "Failed to connect to RabbitMQ")
+    defer conn.Close()
+
+    ch, err := conn.Channel()
+    failOnError(err, "Failed to open a channel")
+    defer ch.Close()
+
+    q, err := ch.QueueDeclare(
+      "logol-analyse-" + queueName, // name
+      false,   // durable
+      false,   // delete when usused
+      false,   // exclusive
+      false,   // no-wait
+      nil,     // arguments
+    )
+
+    failOnError(err, "Failed to declare a queue")
+
+    _, rqerr := ch.QueueDeclare(
+      "logol-result-" + queueName, // name
+      false,   // durable
+      false,   // delete when usused
+      false,   // exclusive
+      false,   // no-wait
+      nil,     // arguments
+    )
+
+    failOnError(rqerr, "Failed to declare a queue")
+
+    err = ch.ExchangeDeclare(
+      "logol-event-exchange-" + queueName, // name
+      "fanout",  // kind
+      false,   // durable
+      false,   // delete when usused
+      false,   // exclusive
+      false,   // no-wait
+      nil,     // arguments
+    )
+
+    failOnError(err, "Failed to declare an exchange")
+
+    eventQueue, err := ch.QueueDeclare(
+        "",
+        false,   // durable
+        false,   // delete when usused
+        true,   // exclusive
+        false,   // no-wait
+        nil,     // arguments
+    )
+
+    failOnError(err, "Failed to declare a queue")
+
+    err = ch.QueueBind(
+        eventQueue.Name, // name,
+        "", // key
+        "logol-event-exchange-" + queueName,  // exchange
+        false, // no-wait
+        nil, // arguments
+    )
+
+    failOnError(err, "Failed to bind queue")
+
+    err = ch.Qos(
+      1,     // prefetch count
+      0,     // prefetch size
+      false, // global
+    )
+    failOnError(err, "Failed to set QoS")
+
+    msgs, err := ch.Consume(
+      q.Name, // queue
+      "",     // consumer
+      false,   // auto-ack
+      false,  // exclusive
+      false,  // no-local
+      false,  // no-wait
+      nil,    // args
+    )
+    failOnError(err, "Failed to register a consumer")
+
+    events, err := ch.Consume(
+      eventQueue.Name, // queue
+      "",     // consumer
+      false,   // auto-ack
+      false,  // exclusive
+      false,  // no-local
+      false,  // no-wait
+      nil,    // args
+    )
+    failOnError(err, "Failed to register a consumer")
+
+    forever := make(chan bool)
+
+    ban := false
+
+    msgManager := NewMsgManager("localhost", ch, "test")
+    err, g := logol.LoadGrammar([]byte(grammar))
+    if err != nil {
+            log.Fatalf("error: %v", err)
+    }
+    msgManager.Grammar = g
+
+    go func() {
+      for d := range msgs {
+        log.Printf("Received a message: %s", string(d.Body[:]))
+        if ban {
+            d.Ack(false)
+            continue
+
+        } else {
+            result, err := msgManager.get(string(d.Body[:]))
+            if err != nil {
+                log.Printf("Failed to get message")
+                d.Ack(false)
+                continue
+            }
+            log.Printf("Received message: %s", result.MsgTo)
+            // TODO to remove, for debug only
+            json_msg, _ := json.Marshal(result)
+            log.Printf("#DEBUG# %s", json_msg)
+            now := time.Now()
+            start_time := now.UnixNano()
+            now = time.Now()
+            log.Printf("Received:Model:%s:Variable:%s", result.Model, result.ModelVariable)
+            msgManager.handleMessage(result)
+            end_time := now.UnixNano()
+            duration := end_time - start_time
+            sendStats(result.Model, result.ModelVariable, duration)
+            // json.Unmarshal([]byte(d.Body), &result)
+            d.Ack(false)
+
+        }
+      }
+    }()
+
+    go func() {
+      for d := range events {
+        log.Printf("Received an event: %s", d.Body)
+        msgEvent := MsgEvent{}
+        json.Unmarshal([]byte(d.Body), &msgEvent)
+        switch msgEvent.Step {
+            case STEP_END:
+                log.Printf("Received exit request")
+                d.Ack(false)
+                os.Exit(0)
+            case STEP_BAN:
+                ban = true
+                d.Ack(false)
+            default:
+                d.Ack(false)
+        }
+      }
+    }()
+
+
+    log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+    <-forever
+}

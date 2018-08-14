@@ -1,0 +1,53 @@
+package logol
+
+import (
+    "log"
+    "regexp"
+    logol "org.irisa.genouest/logol/lib/types"
+)
+
+
+func Find(grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
+    // TODO
+    matches = FindExact(grammar, match, model, modelVariable, contextVars, spacer)
+    return matches
+}
+
+
+func FindExact(grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
+    // TODO find only non overlapping, func for testing only
+    curVariable := grammar.Models[model].Vars[modelVariable]
+    if (curVariable.Value == "" &&
+        curVariable.String_constraints.Content != "") {
+        contentConstraint := curVariable.String_constraints.Content
+        curVariable.Value = GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
+    }
+
+    log.Printf("Search %s at min pos %d, spacer: %t", curVariable.Value, match.MinPosition, spacer)
+
+    r, _ := regexp.Compile("(" + curVariable.Value + ")")
+    sequence := GetSequence()
+    findResults := r.FindAllStringIndex(sequence, -1)
+    ban := 0
+    for _, findResult := range findResults {
+        startResult := findResult[0]
+        endResult := findResult[1]
+        if ! spacer {
+            if startResult != match.MinPosition {
+                log.Printf("skip match at wrong position: %d" , startResult)
+                ban += 1
+                continue
+            }
+        }
+        newMatch := logol.NewMatch()
+        newMatch.Id = modelVariable
+        newMatch.Model = model
+        newMatch.Start = startResult
+        newMatch.End = endResult
+        newMatch.Info = curVariable.Value
+        matches = append(matches, newMatch)
+        log.Printf("got match: %d, %d", newMatch.Start, newMatch.End)
+    }
+    log.Printf("got matches: %d", (len(findResults) - ban))
+    return matches
+}
