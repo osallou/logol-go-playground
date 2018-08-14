@@ -5,6 +5,7 @@ import (
   "log"
   "os"
   "encoding/json"
+  "strconv"
   "time"
   "github.com/streadway/amqp"
   logol "org.irisa.genouest/logol/lib/types"
@@ -199,6 +200,17 @@ func (h MsgHandler) Results(queueName string, fn MsgCallback) {
 
     msgManager := NewMsgManager("localhost", ch, "test")
 
+    nbMatches := 0
+    maxMatches := 100
+    os_maxMatches := os.Getenv("LOGOL_MAX_MATCH")
+    if os_maxMatches != ""{
+        maxMatches, err = strconv.Atoi(os_maxMatches)
+        if err != nil {
+            log.Printf("Invalid env variable LOGOL_MAX_MATCH, using default [100]")
+            maxMatches = 100
+        }
+    }
+
     go func() {
         file, err := os.Create("logol." + queueName + ".out")
         failOnError(err, "Failed to create output file")
@@ -212,9 +224,17 @@ func (h MsgHandler) Results(queueName string, fn MsgCallback) {
                 d.Ack(false)
                 continue
             }
-            matches, _ := json.Marshal(result.Matches)
-            fmt.Fprintln(file, "", string(matches))
-            log.Printf("%s", matches)
+
+            nbMatches += 1
+            if nbMatches <= maxMatches {
+                msgManager.Client.Incr("logol:match")
+                matches, _ := json.Marshal(result.Matches)
+                fmt.Fprintln(file, "", string(matches))
+                log.Printf("%s", matches)
+            }else {
+                log.Printf("Max results reached [%d], waiting to end...", maxMatches)
+                msgManager.Client.Incr("logol:ban")
+            }
             d.Ack(false)
         }
     }()

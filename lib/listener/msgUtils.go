@@ -264,31 +264,38 @@ func (m msgManager) handleMessage(result logol.Result) {
 
         match.MinPosition = result.Position
 
-        matches := seq.Find(m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
+        matchChannel := make(chan logol.Match)
+
+        // matches := seq.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
+        go seq.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
         nextVars := curVariable.Next
         nbNext := 0
-
+        /*
         if len(matches) == 0 {
             m.Client.Incr("logol:ban")
             return
         }
+        */
         if len(nextVars) > 0 {
             nbNext = len(nextVars)
         }
+        /*
         if nbNext > 0 {
             incCount := (nbNext * len(matches)) - 1
             m.Client.IncrBy("logol:count", int64(incCount))
         }else {
             incCount := len(matches) - 1
             m.Client.IncrBy("logol:count", int64(incCount))
-        }
+        }*/
 
         prevMatches := result.Matches
         prevFrom := result.From
 
         result.Spacer = false
-
-        for _,match := range matches {
+        nbMatches := 0
+        //for _,match := range matches {
+        for match := range matchChannel {
+            nbMatches += 1
             result.From = make([]string, 0)
             for _, from := range prevFrom {
                 result.From = append(result.From, from)
@@ -305,6 +312,17 @@ func (m msgManager) handleMessage(result logol.Result) {
                 log.Printf("SaveAs:%s", json_msg)
             }
             m.go_next(model, modelVariable, result)
+        }
+        if nbMatches == 0 {
+            m.Client.Incr("logol:ban")
+            return
+        }
+        if nbNext > 0 {
+            incCount := (nbNext * nbMatches) - 1
+            m.Client.IncrBy("logol:count", int64(incCount))
+        }else {
+            incCount := nbMatches - 1
+            m.Client.IncrBy("logol:count", int64(incCount))
         }
 
     }

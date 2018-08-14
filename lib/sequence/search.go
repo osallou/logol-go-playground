@@ -7,14 +7,14 @@ import (
 )
 
 
-func Find(grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
+func Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
     // TODO
-    matches = FindExact(grammar, match, model, modelVariable, contextVars, spacer)
+    matches = FindExact(mch, grammar, match, model, modelVariable, contextVars, spacer)
     return matches
 }
 
 
-func FindExact(grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
+func FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
     // TODO find only non overlapping, func for testing only
     curVariable := grammar.Models[model].Vars[modelVariable]
     if (curVariable.Value == "" &&
@@ -45,9 +45,11 @@ func FindExact(grammar logol.Grammar, match logol.Match, model string, modelVari
         newMatch.Start = startResult
         newMatch.End = endResult
         newMatch.Info = curVariable.Value
-        matches = append(matches, newMatch)
+        mch <- newMatch
+        // matches = append(matches, newMatch)
         log.Printf("got match: %d, %d", newMatch.Start, newMatch.End)
     }
     log.Printf("got matches: %d", (len(findResults) - ban))
+    close(mch)
     return matches
 }

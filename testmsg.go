@@ -5,9 +5,11 @@ import (
         "fmt"
         "log"
         "encoding/json"
+        "strconv"
+        "time"
         //"gopkg.in/yaml.v2"
         "github.com/streadway/amqp"
-        //msgHandler "org.irisa.genouest/logol/lib/listener"
+        msgHandler "org.irisa.genouest/logol/lib/listener"
         redis "github.com/go-redis/redis"
         "github.com/satori/go.uuid"
         logol "org.irisa.genouest/logol/lib/types"
@@ -28,6 +30,15 @@ func main() {
     ch, _ := conn.Channel()
     _, _ = ch.QueueDeclare(
       "logol-analyse-test", // name
+      false,   // durable
+      false,   // delete when usused
+      false,   // exclusive
+      false,   // no-wait
+      nil,     // arguments
+    )
+    ch.ExchangeDeclare(
+      "logol-event-exchange-test", // name
+      "fanout",  // kind
       false,   // durable
       false,   // delete when usused
       false,   // exclusive
@@ -67,5 +78,31 @@ func main() {
         publish_msg,
     )
 
-
+    notOver := true
+    for notOver {
+        rcount, _ := redisClient.Get("logol:count").Result()
+        count, _ := strconv.Atoi(rcount)
+        rban, _ := redisClient.Get("logol:ban").Result()
+        ban, _ := strconv.Atoi(rban)
+        rmatches, _ := redisClient.Get("logol:match").Result()
+        matches, _ := strconv.Atoi(rmatches)
+        log.Printf("Count: %d, Ban: %d, Matches: %d", count, ban, matches)
+        if matches + ban == count {
+            log.Printf("Search is over, exiting...")
+            publish_msg := amqp.Publishing{}
+            msg := logol.NewResult()
+            msg.Step = msgHandler.STEP_END
+            exit_msg, _ := json.Marshal(msg)
+            publish_msg.Body = []byte(exit_msg)
+            ch.Publish(
+                "logol-event-exchange-test", // exchange
+                "", // key
+                false, // mandatory
+                false, // immediate
+                publish_msg,
+            )
+            notOver = false
+        }
+        time.Sleep(2000 * time.Millisecond)
+    }
 }
