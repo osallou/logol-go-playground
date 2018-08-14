@@ -21,6 +21,10 @@ func FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, m
         curVariable.String_constraints.Content != "") {
         contentConstraint := curVariable.String_constraints.Content
         curVariable.Value = GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
+        if curVariable.Value == "" {
+            close(mch)
+            return
+        }
     }
 
     log.Printf("Search %s at min pos %d, spacer: %t", curVariable.Value, match.MinPosition, spacer)

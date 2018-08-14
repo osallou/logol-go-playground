@@ -34,10 +34,16 @@ type Model struct {
     Start string
     Vars map[string]Variable
 }
+
+type MainModel struct {
+    Model string
+    Param []string
+}
+
 type Grammar struct {
     Morphisms []Morphism
     Models map[string]Model
-    Run []string
+    Run []MainModel
 }
 
 func LoadGrammar(grammar []byte) (error, Grammar) {

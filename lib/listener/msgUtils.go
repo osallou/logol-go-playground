@@ -92,6 +92,48 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
             log.Printf("Go back to calling model %s %s", backModel, backVariable)
             m.sendMessage(backModel, backVariable, data, false)
         }else {
+            modelsToRun := len(m.Grammar.Run) - 1
+            log.Printf("Other main models? %d vs %d", data.RunIndex, modelsToRun)
+            if data.RunIndex < modelsToRun {
+                // Run next main model
+                modelTo := m.Grammar.Run[data.RunIndex + 1].Model
+                modelVariableTo := m.Grammar.Models[modelTo].Start
+                log.Printf("Go to next main model %s:%s", modelTo, modelVariableTo)
+                tmpResult := logol.NewResult()
+                tmpResult.Uid = data.Uid
+                //data.From = make([]string, 0)
+                tmpResult.PrevMatches = append(data.PrevMatches, data.Matches)
+                tmpResult.Matches = make([]logol.Match, 0)
+                tmpResult.Spacer = true
+                tmpResult.Position = 0
+                // Update params
+                tmpContextVars := make(map[string]logol.Match)
+                currentModelParams := m.Grammar.Run[data.RunIndex].Param
+                for i, param := range currentModelParams {
+                    tmpContextVars[param] = data.ContextVars[len(data.ContextVars) - 1][m.Grammar.Models[model].Param[i]]
+                }
+                modelParams := m.Grammar.Run[data.RunIndex + 1].Param
+                tmpResult.Param = make([]logol.Match, len(modelParams))
+                for i, param := range modelParams {
+                    p, ok := tmpContextVars[param]
+                    if ! ok {
+                        log.Printf("Param %s not available adding empty one", param)
+                        tmpResult.Param[i] = logol.NewMatch()
+                    }else {
+                        log.Printf("Add param %s", param)
+                        tmpResult.Param[i] = p
+                    }
+                }
+                debug_json, _ := json.Marshal(tmpResult)
+                log.Printf("Send to main model: %s", debug_json)
+
+                tmpResult.ContextVars = make([]map[string]logol.Match, 0)
+                tmpResult.RunIndex = data.RunIndex + 1
+                m.sendMessage(modelTo, modelVariableTo, tmpResult, false)
+                return
+
+            }
+
             data.Iteration = 0
             data.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], m.Grammar.Models[model].Param)
             data_json, _ := json.Marshal(data)
@@ -154,6 +196,7 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
     curVariable := m.Grammar.Models[model].Vars[modelVariable]
     callModel := curVariable.Model.Name
     tmpResult := logol.NewResult()
+    tmpResult.Uid = data.Uid
     tmpResult.Step = STEP_PRE
     tmpResult.Iteration = data.Iteration + 1
     tmpResult.From = data.From
@@ -248,7 +291,7 @@ func (m msgManager) handleMessage(result logol.Result) {
 
         if result.Iteration < m.Grammar.Models[model].Vars[modelVariable].Model.RepeatMax {
             log.Printf("Continue iteration for %s, %s", model, modelVariable)
-            m.Client.IncrBy("logol:count", 1)
+            m.Client.IncrBy("logol:" + result.Uid + ":count", 1)
             m.call_model(model, modelVariable, result, result.ContextVars[len(result.ContextVars) - 1])
         }
         m.go_next(model, modelVariable, result)
@@ -270,23 +313,10 @@ func (m msgManager) handleMessage(result logol.Result) {
         go seq.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
         nextVars := curVariable.Next
         nbNext := 0
-        /*
-        if len(matches) == 0 {
-            m.Client.Incr("logol:ban")
-            return
-        }
-        */
+
         if len(nextVars) > 0 {
             nbNext = len(nextVars)
         }
-        /*
-        if nbNext > 0 {
-            incCount := (nbNext * len(matches)) - 1
-            m.Client.IncrBy("logol:count", int64(incCount))
-        }else {
-            incCount := len(matches) - 1
-            m.Client.IncrBy("logol:count", int64(incCount))
-        }*/
 
         prevMatches := result.Matches
         prevFrom := result.From
@@ -314,15 +344,15 @@ func (m msgManager) handleMessage(result logol.Result) {
             m.go_next(model, modelVariable, result)
         }
         if nbMatches == 0 {
-            m.Client.Incr("logol:ban")
+            m.Client.Incr("logol:" + result.Uid + ":ban")
             return
         }
         if nbNext > 0 {
             incCount := (nbNext * nbMatches) - 1
-            m.Client.IncrBy("logol:count", int64(incCount))
+            m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
         }else {
             incCount := nbMatches - 1
-            m.Client.IncrBy("logol:count", int64(incCount))
+            m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
         }
 
     }
