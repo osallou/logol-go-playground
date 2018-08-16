@@ -1,16 +1,21 @@
 package logol
 
 import (
-    "encoding/json"
+    // "encoding/json"
     "log"
     "regexp"
     logol "org.irisa.genouest/logol/lib/types"
     cassie "org.irisa.genouest/cassiopee"
 )
 
+func CanFind(grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (can bool) {
+    // TODO
+    return true
+}
+
 func Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
     // TODO
-    
+
     if spacer {
         fakeMatch := logol.NewMatch()
         mch <- fakeMatch
@@ -23,10 +28,8 @@ func Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model 
 }
 
 func FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, searchHandler cassie.CassieSearch) (matches []logol.Match) {
-    // TODO
     log.Printf("Search in Cassie")
-    json_msg, _ := json.Marshal(contextVars)
-    log.Printf("CV:%s", json_msg)
+    // json_msg, _ := json.Marshal(contextVars)
     seq := Sequence{grammar.Sequence, 0, ""}
     curVariable := grammar.Models[model].Vars[modelVariable]
     if (curVariable.Value == "" &&

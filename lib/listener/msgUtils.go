@@ -294,7 +294,7 @@ func (m msgManager) handleMessage(result logol.Result) {
         result.Matches = append(result.Matches, match)
         result.Step = STEP_NONE
         result.Position = match.End
-        result.Spacer = False
+        result.Spacer = false
 
         if result.Iteration < m.Grammar.Models[model].Vars[modelVariable].Model.RepeatMax {
             log.Printf("Continue iteration for %s, %s", model, modelVariable)
