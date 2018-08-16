@@ -9,6 +9,7 @@ import (
   "time"
   "github.com/streadway/amqp"
   logol "org.irisa.genouest/logol/lib/types"
+  cassie "org.irisa.genouest/cassiopee"
 )
 
 const STEP_NONE int = -1
@@ -16,6 +17,7 @@ const STEP_PRE int = 0
 const STEP_POST int = 1
 const STEP_END int = 2
 const STEP_BAN int = 3
+const STEP_CASSIE int = 4
 
 
 func failOnError(err error, msg string) {
@@ -143,6 +145,11 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
     forever := make(chan bool)
 
     go func() {
+        //var cassieIndexer cassie.CassieIndexer = nil
+        //msgManager.CassieManager = logol.NewCassieManager()
+        var cassieIndexer cassie.CassieIndexer
+        //defer cassie.DeleteCassieIndexer(msgManager.CassieManager.Indexer)
+        indexerLoaded := false
 
         for d := range msgs {
             result, err := msgManager.get(string(d.Body[:]))
@@ -174,6 +181,25 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
             }
 
 
+            if ! indexerLoaded {
+                // TODO should reindex if pattern length is longer this time
+                //msgManager.CassieManager.GetIndexer(msgManager.Grammar.Sequence)
+                cassieIndexer = cassie.NewCassieIndexer(msgManager.Grammar.Sequence)
+                cassieIndexer.SetMax_index_depth(1000)
+                cassieIndexer.SetMax_depth(10000)
+                cassieIndexer.SetDo_reduction(true)
+                cassieIndexer.Index()
+                indexerLoaded = true
+            }
+            log.Printf("Load cassie searcher")
+            cassieSearcher := cassie.NewCassieSearch(cassieIndexer)
+            cassieSearcher.SetMode(0)
+            cassieSearcher.SetMax_subst(0)
+            cassieSearcher.SetMax_indel(0)
+            cassieSearcher.SetAmbiguity(false)
+            msgManager.CassieManager = logol.Cassie{cassieIndexer, cassieSearcher,0}
+
+
             log.Printf("Received message: %s", result.MsgTo)
             // TODO to remove, for debug only
             json_msg, _ := json.Marshal(result)
@@ -186,9 +212,12 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
             end_time := now.UnixNano()
             duration := end_time - start_time
             sendStats(result.Model, result.ModelVariable, duration)
+            //cassie.DeleteCassieSearch(msgManager.CassieManager.Searcher)
             // json.Unmarshal([]byte(d.Body), &result)
+            cassie.DeleteCassieSearch(cassieSearcher)
             d.Ack(false)
         }
+        cassie.DeleteCassieIndexer(cassieIndexer)
     }()
 
     go func() {

@@ -212,4 +212,5 @@ func main() {
     ch.ExchangeDelete("logol-event-exchange-test", false, false)
     ch.QueueDelete("logol-analyse-test", false, false, false)
     ch.QueueDelete("logol-result-test", false, false, false)
+    ch.QueueDelete("logol-cassie-test", false, false, false)
 }

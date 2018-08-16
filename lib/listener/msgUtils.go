@@ -31,6 +31,7 @@ type msgManager struct {
     Ch *amqp.Channel
     Chuid string
     Grammar logol.Grammar
+    CassieManager logol.Cassie
 }
 
 func NewMsgManager(host string, ch *amqp.Channel, chuid string) msgManager {
@@ -226,23 +227,25 @@ func (m msgManager) handleMessage(result logol.Result) {
     // var newContextVars map[string]logol.Match
     newContextVars := make(map[string]logol.Match)
 
-    if modelVariable == m.Grammar.Models[model].Start {
-        if len(m.Grammar.Models[model].Param) > 0 {
-            for i, _ := range m.Grammar.Models[model].Param {
-                inputId :=  m.Grammar.Models[model].Param[i]
-                if i >= len(result.Param) {
-                    log.Printf("Param not defined")
-                    match := logol.NewMatch()
-                    match.Id = inputId
-                    match.Model = model
-                    newContextVars[inputId] = match
-                }else{
-                    newContextVars[inputId] = result.Param[i]
+    if result.Step != STEP_CASSIE {
+        if modelVariable == m.Grammar.Models[model].Start {
+            if len(m.Grammar.Models[model].Param) > 0 {
+                for i, _ := range m.Grammar.Models[model].Param {
+                    inputId :=  m.Grammar.Models[model].Param[i]
+                    if i >= len(result.Param) {
+                        log.Printf("Param not defined")
+                        match := logol.NewMatch()
+                        match.Id = inputId
+                        match.Model = model
+                        newContextVars[inputId] = match
+                    }else{
+                        newContextVars[inputId] = result.Param[i]
+                    }
                 }
             }
+            result.ContextVars = append(result.ContextVars, newContextVars)
+            result.Param = make([]logol.Match, 0)
         }
-        result.ContextVars = append(result.ContextVars, newContextVars)
-        result.Param = make([]logol.Match, 0)
     }
 
     contextVars := result.ContextVars[len(result.ContextVars) - 1]
@@ -313,7 +316,13 @@ func (m msgManager) handleMessage(result logol.Result) {
         matchChannel := make(chan logol.Match)
 
         // matches := seq.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
-        go seq.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
+        if result.Step == STEP_CASSIE {
+            log.Printf("DEBUG in cassie")
+            go seq.FindCassie(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer, m.CassieManager.Searcher)
+            result.Step = STEP_NONE
+        } else {
+            go seq.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
+        }
         nextVars := curVariable.Next
         nbNext := 0
 
@@ -330,8 +339,10 @@ func (m msgManager) handleMessage(result logol.Result) {
         //for _,match := range matches {
         for match := range matchChannel {
             // Fake match to indicate that match should be forwarded to cassie queue, doing nothing here
+            log.Printf("Got %s", match.Id)
             if match.Id == "" {
                 toForward = true
+                log.Printf("Forward to cassie")
                 continue
             }
             nbMatches += 1
@@ -353,6 +364,7 @@ func (m msgManager) handleMessage(result logol.Result) {
             m.go_next(model, modelVariable, result)
         }
         if toForward {
+            result.Step = STEP_CASSIE
             publish_msg := m.prepareMessage(model, modelVariable, result)
             m.publishMessage("logol-cassie-" + m.Chuid, publish_msg)
             return
