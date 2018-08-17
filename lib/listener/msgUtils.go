@@ -268,9 +268,16 @@ func (m msgManager) handleMessage(result logol.Result) {
         matchChannel := make(chan logol.Match)
         // If is model, just look at children to compute and check constraints
         // TODO manage model case
+
         // Else find it, forward to cassie if needed
         nbMatches := 0
-        go seq.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches, m.CassieManager.Searcher)
+
+        isModel := m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id].Model.Name != ""
+        if isModel {
+            go seq.FixModel(matchChannel, matchToAnalyse)
+        } else {
+            go seq.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches, m.CassieManager.Searcher)
+        }
         result.YetToBeDefined = append(result.YetToBeDefined[:index], result.YetToBeDefined[index+1:]...)
         for match := range matchChannel {
             match.Uid = matchToAnalyse.Uid
@@ -288,15 +295,8 @@ func (m msgManager) handleMessage(result logol.Result) {
         m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
 
 
-        //log.Printf("should be able to defined variable, but not yet implemented, skipping")
-        //m.Client.Incr("logol:" + result.Uid + ":ban")
         return
-        // find & update variable, remove from result.YetToBeDefined
-        // then send for each possible match
-        /*
-        publish_msg := m.prepareMessage(model, modelVariable, result)
-        m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
-        */
+
     }
 
     if result.Step != STEP_CASSIE {
@@ -359,7 +359,7 @@ func (m msgManager) handleMessage(result logol.Result) {
             if (match.Start == -1 || m.Start < match.Start) {
                 match.Start = m.Start
             }
-            if (match.End == -1 || m.End < match.End) {
+            if (match.End == -1 || m.End > match.End) {
                 match.End = m.End
             }
             match.Sub += m.Sub

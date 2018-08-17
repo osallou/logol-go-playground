@@ -10,6 +10,26 @@ import (
     cassie "org.irisa.genouest/cassiopee"
 )
 
+func FixModel(mch chan logol.Match, match logol.Match) {
+    match.Sub = 0
+    match.Indel = 0
+    for i, m := range match.Children {
+        if i ==0 {
+            match.Spacer = m.Spacer
+            match.MinPosition = m.MinPosition
+        }
+        if (match.Start == -1 || m.Start < match.Start) {
+            match.Start = m.Start
+        }
+        if (match.End == -1 || m.End > match.End) {
+            match.End = m.End
+        }
+        match.Sub += m.Sub
+        match.Indel += m.Indel
+    }
+    mch <- match
+}
+
 func FindFuture(mch chan logol.Match, match logol.Match, model string, modelVariable string) {
     tmpMatch := match.Clone()
     tmpMatch.Id = modelVariable
@@ -119,7 +139,7 @@ func FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, 
     if (curVariable.Value == "" &&
         curVariable.String_constraints.Content != "") {
         contentConstraint := curVariable.String_constraints.Content
-        log.Printf("TRY TO FETCH FROM CV %d", contextVars[contentConstraint].Start)
+        // log.Printf("TRY TO FETCH FROM CV %d", contextVars[contentConstraint].Start)
         curVariable.Value = seq.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
         if curVariable.Value == "" {
             close(mch)
@@ -129,6 +149,9 @@ func FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, 
 
     searchHandler.Search(curVariable.Value)
     searchHandler.Sort()
+    if searchHandler.GetMax_indel() > 0 {
+        searchHandler.RemoveDuplicates()
+    }
     smatches := cassie.GetMatchList(searchHandler)
     msize := smatches.Size()
     var i int64
@@ -150,7 +173,7 @@ func FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, 
             continue
         }
         mch <- newMatch
-        log.Printf("DEBUG matches:%d %d %d", i, newMatch.Start, newMatch.End)
+        // log.Printf("DEBUG matches:%d %d %d", i, newMatch.Start, newMatch.End)
         i++
     }
     close(mch)
