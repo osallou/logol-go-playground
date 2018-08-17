@@ -5,6 +5,7 @@ import (
         "fmt"
         "log"
         "encoding/json"
+        "io/ioutil"
         "os"
         "os/signal"
         "strconv"
@@ -18,7 +19,7 @@ import (
         logol "org.irisa.genouest/logol/lib/types"
 )
 
-const grammar = `
+const testgrammar = `
 morphisms:
   - foo:
     - a
@@ -125,6 +126,13 @@ func main() {
 
     data := logol.NewResult()
     data.Uid = jobuid.String()
+
+    grammarFile := "grammar.txt"
+    osGrammar := os.Getenv("LOGOL_GRAMMAR")
+    if osGrammar != "" {
+        grammarFile = osGrammar
+    }
+    grammar, _ := ioutil.ReadFile(grammarFile)
     err, g := logol.LoadGrammar([]byte(grammar))
     if err != nil {
             log.Fatalf("error: %v", err)

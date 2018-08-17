@@ -1,0 +1,30 @@
+morphisms:
+  - foo:
+    - a
+    - g
+models:
+  mod1:
+   comment: 'mod1(-R1)'
+   param: []
+   start: 'var1'
+   vars:
+     var1:
+         value: 'cc'
+         next:
+           - var2
+     var2:
+         value: null
+         string_constraints:
+           content: 'R1'
+         next:
+           - var3
+     var3:
+         value: 'aaa'
+         string_constraints:
+            saveas: 'R1'
+         next: null
+run:
+ - model: mod1
+   param: []
+
+sequence: sequence.txt

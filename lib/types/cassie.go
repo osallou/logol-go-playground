@@ -1,7 +1,7 @@
 package logol
 
 import (
-    "log"
+    // "log"
     cassie "org.irisa.genouest/cassiopee"
 )
 
@@ -22,6 +22,7 @@ func NewCassieManager() Cassie {
     return Cassie{}
 }
 
+/*
 func (c Cassie) GetIndexer(sequence string) {
     c.Indexer = cassie.NewCassieIndexer(sequence)
     c.Indexer.SetMax_index_depth(1000)
@@ -29,14 +30,7 @@ func (c Cassie) GetIndexer(sequence string) {
     // c.Indexer.SetDo_reduction(true)
     c.Indexer.Index()
     c.Indexer.Graph()
-    /*
-    c.Searcher = cassie.NewCassieSearch(c.Indexer)
-    c.Searcher.SetMode(0)
-    c.Searcher.SetMax_subst(0)
-    c.Searcher.SetMax_indel(0)
-    c.Searcher.SetAmbiguity(false)
-    log.Printf("Sequence %s indexed", sequence)
-    */
+
 }
 
 func (c Cassie) GetSearcher(options CassieSearchOptions) {
@@ -46,5 +40,5 @@ func (c Cassie) GetSearcher(options CassieSearchOptions) {
     c.Searcher.SetMax_subst(0)
     c.Searcher.SetMax_indel(0)
     c.Searcher.SetAmbiguity(false)
-
 }
+*/

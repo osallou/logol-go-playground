@@ -18,6 +18,7 @@ const STEP_POST int = 1
 const STEP_END int = 2
 const STEP_BAN int = 3
 const STEP_CASSIE int = 4
+const STEP_YETTOBEDEFINED int = 5
 
 
 func failOnError(err error, msg string) {
@@ -349,13 +350,21 @@ func (h MsgHandler) Results(queueName string, fn MsgCallback) {
         for d := range msgs {
             log.Printf("Received a message: %s", string(d.Body[:]))
             result, err := msgManager.get(string(d.Body[:]))
+
+            json_msg, _ := json.Marshal(result)
+            log.Printf("Res: %s", json_msg)
             if err != nil {
                 log.Printf("Failed to get message")
                 d.Ack(false)
                 continue
             }
             log.Printf("Match for job %s", result.Uid)
-
+            matchOk := logol.CheckMatches(result.Matches)
+            if ! matchOk {
+                msgManager.Client.Incr("logol:" + result.Uid + ":ban")
+                d.Ack(false)
+                continue
+            }
             nbMatches += 1
             if nbMatches <= maxMatches {
                 msgManager.Client.Incr("logol:" + result.Uid + ":match")

@@ -107,6 +107,7 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                 tmpResult.Matches = make([]logol.Match, 0)
                 tmpResult.Spacer = true
                 tmpResult.Position = 0
+                tmpResult.YetToBeDefined = data.YetToBeDefined
                 // Update params
                 tmpContextVars := make(map[string]logol.Match)
                 currentModelParams := m.Grammar.Run[data.RunIndex].Param
@@ -159,6 +160,12 @@ func (m msgManager) publishMessage(queue string, msg amqp.Publishing){
         msg,
     )
 }
+
+func (m msgManager) getUid() (string) {
+    uid := uuid.Must(uuid.NewV4())
+    return uid.String()
+}
+
 func (m msgManager) prepareMessage(model string, modelVariable string, data logol.Result) (publish_msg amqp.Publishing){
     u1 := uuid.Must(uuid.NewV4())
     sort.Slice(data.Matches, func(i, j int) bool {
@@ -181,16 +188,25 @@ func (m msgManager) prepareMessage(model string, modelVariable string, data logo
 func (m msgManager) sendMessage(model string, modelVariable string, data logol.Result, over bool) {
     // Send current result to specified component or to result queue if over is true (meaning a full match)
 
-    publish_msg := m.prepareMessage(model, modelVariable, data)
-
-    if over {
-        m.publishMessage("logol-result-" + m.Chuid, publish_msg)
+    // If over or final check step
+    if over || data.Step == STEP_YETTOBEDEFINED {
+        if len(data.YetToBeDefined) > 0 {
+            log.Printf("Some vars are still pending to be analysed, should check them now")
+            data.Step = STEP_YETTOBEDEFINED
+            publish_msg := m.prepareMessage(model, modelVariable, data)
+            m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
+            return
+        } else {
+            publish_msg := m.prepareMessage(model, modelVariable, data)
+            m.publishMessage("logol-result-" + m.Chuid, publish_msg)
+        }
 
     } else {
+        publish_msg := m.prepareMessage(model, modelVariable, data)
         m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
 
     }
-    log.Printf("Sent message to %s", data.MsgTo)
+    log.Printf("Sent message to %s.%s", model, modelVariable)
 
 }
 
@@ -212,6 +228,7 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
     tmpResult.Spacer = data.Spacer
     tmpResult.Position = data.Position
     tmpResult.Param = make([]logol.Match, 0)
+    tmpResult.YetToBeDefined = data.YetToBeDefined
     if len(curVariable.Model.Param) > 0 {
         tmpResult.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], curVariable.Model.Param)
     }
@@ -226,6 +243,61 @@ func (m msgManager) handleMessage(result logol.Result) {
     modelVariable := result.ModelVariable
     // var newContextVars map[string]logol.Match
     newContextVars := make(map[string]logol.Match)
+    log.Printf("Received message for step %d", result.Step)
+    if result.Step == STEP_YETTOBEDEFINED {
+        index := result.GetFirstMatchAnalysable()
+        if index == -1 {
+            log.Printf("No variable in YetToBeDefined can be analysed, stopping here")
+            m.Client.Incr("logol:" + result.Uid + ":ban")
+            return
+        }
+        if index == -2 {
+            log.Printf("All yet to be defined done, sending result")
+            publish_msg := m.prepareMessage("over", "over", result)
+            m.publishMessage("logol-result-" + m.Chuid, publish_msg)
+            return
+        }
+        if result.YetToBeDefined[index].NeedCassie {
+            // Forward to cassie
+            publish_msg := m.prepareMessage(model, modelVariable, result)
+            m.publishMessage("logol-cassie-" + m.Chuid, publish_msg)
+            return
+        }
+
+        matchToAnalyse := result.YetToBeDefined[index]
+        matchChannel := make(chan logol.Match)
+        // If is model, just look at children to compute and check constraints
+        // TODO manage model case
+        // Else find it, forward to cassie if needed
+        nbMatches := 0
+        go seq.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches, m.CassieManager.Searcher)
+        result.YetToBeDefined = append(result.YetToBeDefined[:index], result.YetToBeDefined[index+1:]...)
+        for match := range matchChannel {
+            match.Uid = matchToAnalyse.Uid
+            nbMatches += 1
+            seq.UpdateByUid(match, result.Matches)
+            publish_msg := m.prepareMessage("ytbd", "ytbd", result)
+            m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
+        }
+
+        if nbMatches == 0 {
+            m.Client.Incr("logol:" + result.Uid + ":ban")
+            return
+        }
+        incCount := nbMatches - 1
+        m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
+
+
+        //log.Printf("should be able to defined variable, but not yet implemented, skipping")
+        //m.Client.Incr("logol:" + result.Uid + ":ban")
+        return
+        // find & update variable, remove from result.YetToBeDefined
+        // then send for each possible match
+        /*
+        publish_msg := m.prepareMessage(model, modelVariable, result)
+        m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
+        */
+    }
 
     if result.Step != STEP_CASSIE {
         if modelVariable == m.Grammar.Models[model].Start {
@@ -274,9 +346,15 @@ func (m msgManager) handleMessage(result logol.Result) {
         match := logol.NewMatch()
         match.Model = model
         match.Id = modelVariable
-
+        match.Uid = m.getUid()
         log.Printf("Create var from model matches")
-        for _, m := range result.Matches {
+        // TODO check if some childs are YetToBeDefined, if yes, mark model with YetToBeDefined
+        // Sets however what can be done and add subvars to match.YetToBeDefined
+        for i, m := range result.Matches {
+            if i ==0 {
+                match.Spacer = m.Spacer
+                match.MinPosition = m.MinPosition
+            }
             log.Printf("Compare %d <? %d", match.Start, m.Start)
             if (match.Start == -1 || m.Start < match.Start) {
                 match.Start = m.Start
@@ -286,15 +364,24 @@ func (m msgManager) handleMessage(result logol.Result) {
             }
             match.Sub += m.Sub
             match.Indel += m.Indel
+            if m.Start == -1 || m.End == -1 {
+                match.YetToBeDefined = append(match.YetToBeDefined, m.Uid)
+            }
+
         }
         log.Printf("New model match pos: %d, %d", match.Start, match.End)
         match.Children = result.Matches
 
         result.Matches = prev_context
+
         result.Matches = append(result.Matches, match)
         result.Step = STEP_NONE
         result.Position = match.End
         result.Spacer = false
+        if len(match.YetToBeDefined) > 0 {
+            result.YetToBeDefined = append(result.YetToBeDefined, match)
+        }
+
 
         if result.Iteration < m.Grammar.Models[model].Vars[modelVariable].Model.RepeatMax {
             log.Printf("Continue iteration for %s, %s", model, modelVariable)
@@ -311,18 +398,26 @@ func (m msgManager) handleMessage(result logol.Result) {
             m.call_model(model, modelVariable, result, contextVars)
             return
         }
+        match.Spacer = result.Spacer
 
         match.MinPosition = result.Position
 
         matchChannel := make(chan logol.Match)
 
-        // matches := seq.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
-        if result.Step == STEP_CASSIE {
-            log.Printf("DEBUG in cassie")
-            go seq.FindCassie(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer, m.CassieManager.Searcher)
-            result.Step = STEP_NONE
+        canFindMatch := true
+        if ! seq.CanFind(m.Grammar, &match, model, modelVariable, contextVars) {
+            canFindMatch = false
+            // TODO, store in result.YetToBeDefined, add empty match with var name and model and continue
+            // should check and update later on
+            go seq.FindFuture(matchChannel, match, model, modelVariable)
         } else {
-            go seq.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
+            if result.Step == STEP_CASSIE {
+                log.Printf("DEBUG in cassie")
+                go seq.FindCassie(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer, m.CassieManager.Searcher)
+                result.Step = STEP_NONE
+            } else {
+                go seq.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
+            }
         }
         nextVars := curVariable.Next
         nbNext := 0
@@ -333,14 +428,17 @@ func (m msgManager) handleMessage(result logol.Result) {
 
         prevMatches := result.Matches
         prevFrom := result.From
+        prevYetToBeDefined := result.YetToBeDefined
 
-        result.Spacer = false
         nbMatches := 0
         toForward := false
+
+        result.Spacer = false
+
         //for _,match := range matches {
         for match := range matchChannel {
             // Fake match to indicate that match should be forwarded to cassie queue, doing nothing here
-            log.Printf("Got %s", match.Id)
+            log.Printf("Got var %s", match.Id)
             if match.Id == "" {
                 toForward = true
                 log.Printf("Forward to cassie")
@@ -351,17 +449,35 @@ func (m msgManager) handleMessage(result logol.Result) {
             for _, from := range prevFrom {
                 result.From = append(result.From, from)
             }
+            match.Uid = m.getUid()
+            match.MinPosition = result.Position
+            match.Spacer = result.Spacer
             result.Position = match.End
-            result.Matches = append(prevMatches, match)
+
             json_msg, _ := json.Marshal(curVariable)
             log.Printf("curVariable:%s", json_msg)
+            json_match, _ := json.Marshal(match)
+            log.Printf("match:%s", json_match)
             if curVariable.String_constraints.SaveAs != "" {
                 //TODO
                 save_as := curVariable.String_constraints.SaveAs
+                contextVar, contextVarAlreadyDefined := contextVars[save_as]
+                if contextVarAlreadyDefined {
+                    match.Uid = contextVar.Uid
+                }
                 contextVars[save_as] = match
                 json_msg, _ = json.Marshal(contextVars)
                 log.Printf("SaveAs:%s", json_msg)
+                match.SavedAs = save_as
             }
+            if ! canFindMatch {
+                match.From = result.From
+                result.Spacer = true
+                result.YetToBeDefined = append(prevYetToBeDefined, match)
+
+            }
+            result.Matches = append(prevMatches, match)
+
             m.go_next(model, modelVariable, result)
         }
         if toForward {
