@@ -146,7 +146,7 @@ func FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, 
         newMatch.End = int(elem.GetPos()) + pLen
         newMatch.Info = curVariable.Value
         if newMatch.Start < match.MinPosition {
-            log.Printf("skip match at wrong position: %d" , startResult)
+            log.Printf("skip match at wrong position: %d" , newMatch.Start)
             continue
         }
         mch <- newMatch
