@@ -5,6 +5,7 @@ import (
     "encoding/json"
     "log"
     "github.com/satori/go.uuid"
+    "strconv"
     logol "org.irisa.genouest/logol/lib/types"
     cassie "org.irisa.genouest/cassiopee"
 )
@@ -126,7 +127,7 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
 
 
 // Find a variable in sequence
-func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
+func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) {
     // TODO manage different search use cases
 
     if spacer {
@@ -134,13 +135,30 @@ func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match log
         fakeMatch.Spacer = true
         fakeMatch.NeedCassie = true
         mch <- fakeMatch
-        matches = append(matches, fakeMatch)
+        //matches = append(matches, fakeMatch)
         close(mch)
-        return matches
+        return
+        //return matches
+    }
+    curVariable := grammar.Models[model].Vars[modelVariable]
+    log.Printf("Size constraints for : %s, %s", curVariable.String_constraints.Size.Min, curVariable.String_constraints.Size.Max)
+    if curVariable.String_constraints.Size.Min != "" || curVariable.String_constraints.Size.Max != "" {
+        min, _ := strconv.Atoi(curVariable.String_constraints.Size.Min)
+        max, _ := strconv.Atoi(curVariable.String_constraints.Size.Max)
+        s.FindAny(
+            mch ,
+            grammar,
+            match,
+            model,
+            modelVariable,
+            min,
+            max,
+            contextVars,
+            spacer)
+    } else {
+        s.FindExact(mch, grammar, match, model, modelVariable, contextVars, spacer)
     }
 
-    matches = s.FindExact(mch, grammar, match, model, modelVariable, contextVars, spacer)
-    return matches
 }
 
 
@@ -197,7 +215,7 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
     return matches
 }
 
-func (s SearchUtils) FindAny(mch chan logol.Match, match logol.Match, model string, modelVariable string, minSize int, maxSize int, spacer bool) {
+func (s SearchUtils) FindAny(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, minSize int, maxSize int, contextVars map[string]logol.Match, spacer bool) {
     log.Printf("Search any string at min pos %d, spacer: %t", match.MinPosition, spacer)
     seqLen := s.SequenceHandler.Sequence.Size
     //sequence := seq.GetSequence()
@@ -217,7 +235,12 @@ func (s SearchUtils) FindAny(mch chan logol.Match, match logol.Match, model stri
             newMatch.Start = i
             newMatch.End = i + patternLen
             newMatch.Info = "*"
-            mch <- newMatch
+            newMatch, err := s.PostControl(newMatch, grammar, contextVars)
+            if ! err {
+                mch <- newMatch
+                // matches = append(matches, newMatch)
+                log.Printf("got match: %d, %d", newMatch.Start, newMatch.End)
+            }
         }
     }
     close(mch)
@@ -230,7 +253,7 @@ func isExact(m1 string, m2 string) (res bool){
 }
 
 // Find an exact pattern in sequence
-func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
+func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) {
     // seq := Sequence{grammar.Sequence, 0, ""}
     curVariable := grammar.Models[model].Vars[modelVariable]
     if (curVariable.Value == "" &&
@@ -294,7 +317,7 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
     }
     log.Printf("got matches: %d", (len(findResults) - ban))
     close(mch)
-    return matches
+    //return matches
 }
 
 
@@ -316,6 +339,7 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
             }
             b1 := DnaString{}
             b1.Value = negConstraint.Value
+            log.Printf("Has negative constraint, check against %s", b1.Value)
             if IsBioExact(b1, seqPart) {
                 return newMatch, true
             }
