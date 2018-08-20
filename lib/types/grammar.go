@@ -27,14 +27,10 @@ type SConstraint struct {
     SaveAs string
     Size SizeConstraint
 }
-// Define additional constraint on match, match should not equal any of those
-//
-// Content OR VarContent should be set, not both
+// Define additional constraint on match
 type NegConstraint struct {
-    // Fixed content e.g. "acgt"
-    Content string
-    // Content of a variable e.g. R1
-    VarContent string
+    Value string
+    String_constraints SConstraint
 }
 type Variable struct {
     Value string

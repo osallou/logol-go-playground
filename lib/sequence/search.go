@@ -186,7 +186,7 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
             log.Printf("skip match at wrong position: %d" , newMatch.Start)
             continue
         }
-        newMatch, err := s.PostControl(newMatch, grammar)
+        newMatch, err := s.PostControl(newMatch, grammar, contextVars)
         if ! err {
             mch <- newMatch
         }
@@ -223,6 +223,12 @@ func (s SearchUtils) FindAny(mch chan logol.Match, match logol.Match, model stri
     close(mch)
 }
 
+
+func isExact(m1 string, m2 string) (res bool){
+    res = m1 == m2
+    return res
+}
+
 // Find an exact pattern in sequence
 func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
     // seq := Sequence{grammar.Sequence, 0, ""}
@@ -248,7 +254,7 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
         seqPart := s.SequenceHandler.GetContent(i, i + patternLen)
 
         // seqPart := sequence[i:i+patternLen]
-        if seqPart == curVariable.Value {
+        if isExact(seqPart, curVariable.Value) {
             elts := [...]int{i, i+patternLen}
             findResults = append(findResults, elts)
         }
@@ -277,7 +283,7 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
         newMatch.Start = startResult
         newMatch.End = endResult
         newMatch.Info = curVariable.Value
-        newMatch, err := s.PostControl(newMatch, grammar)
+        newMatch, err := s.PostControl(newMatch, grammar, contextVars)
         if ! err {
             mch <- newMatch
             // matches = append(matches, newMatch)
@@ -290,8 +296,10 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
 }
 
 
-func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar) (newMatch logol.Match, err bool){
+func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, contextVars map[string]logol.Match) (newMatch logol.Match, err bool){
     // TODO
+    // check model global constraints
+    // Check for negative_constraints
     newMatch = match
     return newMatch, false
 }

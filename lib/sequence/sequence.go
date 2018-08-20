@@ -48,13 +48,13 @@ func NewSequenceLru(sequence Sequence) (seq SequenceLru){
 
 // Get content from sequence using LRU cache
 func (s SequenceLru) GetContent(start int, end int) (content string) {
-    log.Printf("Search in sequence %d:%d", start, end)
+    //log.Printf("Search in sequence %d:%d", start, end)
     keys := s.Lru.Keys()
     sRange := ""
     sStart := 0
     sEnd := 0
     for _, key := range keys {
-        log.Printf("Cache content: %s", key.(string))
+        //log.Printf("Cache content: %s", key.(string))
         r := strings.Split(key.(string), ".")
         sStart, _ = strconv.Atoi(r[0])
         sEnd, _ = strconv.Atoi(r[1])
@@ -64,14 +64,14 @@ func (s SequenceLru) GetContent(start int, end int) (content string) {
         }
     }
     if sRange != "" {
-        log.Printf("Load sequence from cache")
+        //log.Printf("Load sequence from cache")
         cache, _ := s.Lru.Get(sRange)
         seqPart := cache.(string)
         content = seqPart[start - sStart:sEnd - end]
         // content := subpart of cache
         return content
     } else {
-        log.Printf("Read sequence file to extract content")
+        //log.Printf("Read sequence file to extract content")
         file, _ := os.Open(s.Sequence.Path)
         defer file.Close()
         if end > s.Sequence.Size {
@@ -85,12 +85,12 @@ func (s SequenceLru) GetContent(start int, end int) (content string) {
             bufferSize = end - start
         }
         buffer := make([]byte, bufferSize)
-        log.Printf("Load from sequence %d, %d", start, end)
+        //log.Printf("Load from sequence %d, %d", start, end)
         file.ReadAt(buffer, int64(start))
         // get content
         content := string(buffer)
         key := fmt.Sprintf("%d.%d", start, end)
-        log.Printf("Save in LRU %s", key)
+        //log.Printf("Save in LRU %s", key)
         s.Lru.Add(key, content)
         return content
     }

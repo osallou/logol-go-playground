@@ -150,4 +150,13 @@ func TestGrammar(t *testing.T) {
     result := startGrammar(resChan, grammar)
     json_msg, _ := json.Marshal(result)
     log.Printf("Result: %s", json_msg)
+    if len(result) != 2 {
+        t.Errorf("Invalid number of model")
+    }
+    model1 := result[0]
+    var1 := model1[0]
+    if var1.Start != 2 && var1.End != 4 {
+        t.Errorf("Invalid result: %s", json_msg)
+    }
+
 }

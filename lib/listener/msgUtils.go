@@ -410,7 +410,7 @@ func (m msgManager) handleMessage(result logol.Result) {
             }
 
         }
-        match, err := m.SearchUtils.PostControl(match, m.Grammar)
+        match, err := m.SearchUtils.PostControl(match, m.Grammar, contextVars)
         if ! err {
             log.Printf("New model match pos: %d, %d", match.Start, match.End)
             match.Children = result.Matches
