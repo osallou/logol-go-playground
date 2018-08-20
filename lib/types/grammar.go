@@ -18,15 +18,30 @@ type VariableModel struct {
     RepeatMin int
     RepeatMax int
 }
+type SizeConstraint struct {
+    Min string
+    Max string
+}
 type SConstraint struct {
     Content string
     SaveAs string
+    Size SizeConstraint
+}
+// Define additional constraint on match, match should not equal any of those
+//
+// Content OR VarContent should be set, not both
+type NegConstraint struct {
+    // Fixed content e.g. "acgt"
+    Content string
+    // Content of a variable e.g. R1
+    VarContent string
 }
 type Variable struct {
     Value string
     Next []string
     Model VariableModel
     String_constraints SConstraint
+    Negative_constraints[] NegConstraint
 }
 type Model struct {
     Comment string

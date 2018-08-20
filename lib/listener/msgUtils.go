@@ -152,7 +152,6 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                     m.sendMessage(modelTo, modelVariableTo, tmpResult, false)
                 }
                 return
-
             }
 
             data.Iteration = 0
