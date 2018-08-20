@@ -64,10 +64,11 @@ func (s SequenceLru) GetContent(start int, end int) (content string) {
         }
     }
     if sRange != "" {
-        //log.Printf("Load sequence from cache")
+        log.Printf("Load sequence from cache")
         cache, _ := s.Lru.Get(sRange)
         seqPart := cache.(string)
-        content = seqPart[start - sStart:sEnd - end]
+        log.Printf("cache %s, %d, %d", seqPart, start, end)
+        content = seqPart[start - sStart:end - start]
         // content := subpart of cache
         return content
     } else {
@@ -85,7 +86,7 @@ func (s SequenceLru) GetContent(start int, end int) (content string) {
             bufferSize = end - start
         }
         buffer := make([]byte, bufferSize)
-        //log.Printf("Load from sequence %d, %d", start, end)
+        log.Printf("Load from sequence %d, %d", start, end)
         file.ReadAt(buffer, int64(start))
         // get content
         content := string(buffer)

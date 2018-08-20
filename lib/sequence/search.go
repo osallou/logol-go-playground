@@ -236,7 +236,9 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
     if (curVariable.Value == "" &&
         curVariable.String_constraints.Content != "") {
         contentConstraint := curVariable.String_constraints.Content
+        log.Printf("FindExact, get var content %s", contentConstraint)
         curVariable.Value = s.SequenceHandler.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
+        log.Printf("? %s",curVariable.Value)
         if curVariable.Value == "" {
             close(mch)
             return
@@ -301,5 +303,23 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
     // check model global constraints
     // Check for negative_constraints
     newMatch = match
+    log.Printf("PostControl checks")
+
+    seqPart := s.SequenceHandler.GetContent(match.Start, match.End)
+    log.Printf("Check negative constraints")
+    negConstraints := grammar.Models[match.Model].Vars[match.Id].Negative_constraints
+    if len(negConstraints) > 0 {
+        for _, negConstraint := range negConstraints {
+            if negConstraint.Value == "" {
+                contentConstraint := negConstraint.String_constraints.Content
+                negConstraint.Value = s.SequenceHandler.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
+            }
+            b1 := DnaString{}
+            b1.Value = negConstraint.Value
+            if IsBioExact(b1, seqPart) {
+                return newMatch, true
+            }
+        }
+    }
     return newMatch, false
 }
