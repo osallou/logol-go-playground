@@ -138,32 +138,34 @@ func main() {
     if err != nil {
             log.Fatalf("error: %v", err)
     }
+
+
     modelTo := g.Run[0].Model
-    modelVariableTo := g.Models[modelTo].Start
-    data.MsgTo = "logol-" + modelTo + "-" + modelVariableTo
-    data.Model = modelTo
-    data.ModelVariable = modelVariableTo
-    data.Spacer = true
-    data.RunIndex = 0
-
+    modelVariablesTo := g.Models[modelTo].Start
     redisClient.Set("logol:" + data.Uid + ":grammar", grammar, 0)
-
-    redisClient.Set("logol:" + data.Uid + ":count", 1, 0).Err()
+    redisClient.Set("logol:" + data.Uid + ":count", len(modelVariablesTo), 0).Err()
     redisClient.Set("logol:" + data.Uid + ":match", 0, 0).Err()
     redisClient.Set("logol:" + data.Uid + ":ban", 0, 0).Err()
+    for i := 0; i < len(modelVariablesTo); i++ {
+        modelVariableTo := modelVariablesTo[i]
+        data.MsgTo = "logol-" + modelTo + "-" + modelVariableTo
+        data.Model = modelTo
+        data.ModelVariable = modelVariableTo
+        data.Spacer = true
+        data.RunIndex = 0
 
+        json_msg, _ := json.Marshal(data)
+        redisClient.Set(u1.String(), json_msg, 0).Err()
+        log.Printf("Send message %s, %s", u1.String(), string(publish_msg.Body))
 
-    json_msg, _ := json.Marshal(data)
-    redisClient.Set(u1.String(), json_msg, 0).Err()
-    log.Printf("Send message %s, %s", u1.String(), string(publish_msg.Body))
-
-    ch.Publish(
-        "", // exchange
-        "logol-analyse-test", // key
-        false, // mandatory
-        false, // immediate
-        publish_msg,
-    )
+        ch.Publish(
+            "", // exchange
+            "logol-analyse-test", // key
+            false, // mandatory
+            false, // immediate
+            publish_msg,
+        )
+    }
 
     notOver := true
 

@@ -31,7 +31,7 @@ type Variable struct {
 type Model struct {
     Comment string
     Param []string
-    Start string
+    Start[] string
     Vars map[string]Variable
 }
 

@@ -111,40 +111,46 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
             if data.RunIndex < modelsToRun {
                 // Run next main model
                 modelTo := m.Grammar.Run[data.RunIndex + 1].Model
-                modelVariableTo := m.Grammar.Models[modelTo].Start
-                log.Printf("Go to next main model %s:%s", modelTo, modelVariableTo)
-                tmpResult := logol.NewResult()
-                tmpResult.Uid = data.Uid
-                //data.From = make([]string, 0)
-                tmpResult.PrevMatches = append(data.PrevMatches, data.Matches)
-                tmpResult.Matches = make([]logol.Match, 0)
-                tmpResult.Spacer = true
-                tmpResult.Position = 0
-                tmpResult.YetToBeDefined = data.YetToBeDefined
-                // Update params
-                tmpContextVars := make(map[string]logol.Match)
-                currentModelParams := m.Grammar.Run[data.RunIndex].Param
-                for i, param := range currentModelParams {
-                    tmpContextVars[param] = data.ContextVars[len(data.ContextVars) - 1][m.Grammar.Models[model].Param[i]]
-                }
-                modelParams := m.Grammar.Run[data.RunIndex + 1].Param
-                tmpResult.Param = make([]logol.Match, len(modelParams))
-                for i, param := range modelParams {
-                    p, ok := tmpContextVars[param]
-                    if ! ok {
-                        log.Printf("Param %s not available adding empty one", param)
-                        tmpResult.Param[i] = logol.NewMatch()
-                    }else {
-                        log.Printf("Add param %s", param)
-                        tmpResult.Param[i] = p
+                modelVariablesTo := m.Grammar.Models[modelTo].Start
+                for i := 0; i < len(modelVariablesTo); i++ {
+                    if i > 0 {
+                        m.Client.Incr("logol:" + data.Uid + ":count")
                     }
-                }
-                debug_json, _ := json.Marshal(tmpResult)
-                log.Printf("Send to main model: %s", debug_json)
+                    modelVariableTo := modelVariablesTo[i]
+                    log.Printf("Go to next main model %s:%s", modelTo, modelVariableTo)
+                    tmpResult := logol.NewResult()
+                    tmpResult.Uid = data.Uid
+                    //data.From = make([]string, 0)
+                    tmpResult.PrevMatches = append(data.PrevMatches, data.Matches)
+                    tmpResult.Matches = make([]logol.Match, 0)
+                    tmpResult.Spacer = true
+                    tmpResult.Position = 0
+                    tmpResult.YetToBeDefined = data.YetToBeDefined
+                    // Update params
+                    tmpContextVars := make(map[string]logol.Match)
+                    currentModelParams := m.Grammar.Run[data.RunIndex].Param
+                    for i, param := range currentModelParams {
+                        tmpContextVars[param] = data.ContextVars[len(data.ContextVars) - 1][m.Grammar.Models[model].Param[i]]
+                    }
+                    modelParams := m.Grammar.Run[data.RunIndex + 1].Param
+                    tmpResult.Param = make([]logol.Match, len(modelParams))
+                    for i, param := range modelParams {
+                        p, ok := tmpContextVars[param]
+                        if ! ok {
+                            log.Printf("Param %s not available adding empty one", param)
+                            tmpResult.Param[i] = logol.NewMatch()
+                        }else {
+                            log.Printf("Add param %s", param)
+                            tmpResult.Param[i] = p
+                        }
+                    }
+                    debug_json, _ := json.Marshal(tmpResult)
+                    log.Printf("Send to main model: %s", debug_json)
 
-                tmpResult.ContextVars = make([]map[string]logol.Match, 0)
-                tmpResult.RunIndex = data.RunIndex + 1
-                m.sendMessage(modelTo, modelVariableTo, tmpResult, false)
+                    tmpResult.ContextVars = make([]map[string]logol.Match, 0)
+                    tmpResult.RunIndex = data.RunIndex + 1
+                    m.sendMessage(modelTo, modelVariableTo, tmpResult, false)
+                }
                 return
 
             }
@@ -254,8 +260,15 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
     if len(curVariable.Model.Param) > 0 {
         tmpResult.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], curVariable.Model.Param)
     }
-    log.Printf("Call model %s:%s", callModel, m.Grammar.Models[callModel].Start)
-    m.sendMessage(callModel, m.Grammar.Models[callModel].Start, tmpResult, false)
+    modelVariablesTo := m.Grammar.Models[callModel].Start
+    for i := 0; i < len(modelVariablesTo); i++ {
+        if i > 0 {
+            m.Client.Incr("logol:" + tmpResult.Uid + ":count")
+        }
+        modelVariableTo := modelVariablesTo[i]
+        log.Printf("Call model %s:%s", callModel, modelVariableTo)
+        m.sendMessage(callModel, modelVariableTo, tmpResult, false)
+    }
 
 }
 
@@ -322,7 +335,14 @@ func (m msgManager) handleMessage(result logol.Result) {
     }
 
     if result.Step != STEP_CASSIE {
-        if modelVariable == m.Grammar.Models[model].Start {
+        isStartModel := false
+        for _, start := range m.Grammar.Models[model].Start {
+            if modelVariable == start {
+                isStartModel = true
+                break
+            }
+        }
+        if isStartModel {
             if len(m.Grammar.Models[model].Param) > 0 {
                 for i, _ := range m.Grammar.Models[model].Param {
                     inputId :=  m.Grammar.Models[model].Param[i]
