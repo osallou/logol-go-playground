@@ -6,6 +6,7 @@ import (
   "os"
   "encoding/json"
   "strconv"
+  "sync"
   "time"
   "github.com/streadway/amqp"
   logol "org.irisa.genouest/logol/lib/types"
@@ -145,6 +146,9 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
 
     forever := make(chan bool)
 
+    wg := sync.WaitGroup{}
+    wg.Add(2)
+
     go func() {
         //var cassieIndexer cassie.CassieIndexer = nil
         //msgManager.CassieManager = logol.NewCassieManager()
@@ -224,7 +228,10 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
             cassie.DeleteCassieSearch(cassieSearcher)
             d.Ack(false)
         }
+        if cassieIndexer != nil {
         cassie.DeleteCassieIndexer(cassieIndexer)
+        }
+        wg.Done()
     }()
 
     go func(ch chan bool) {
@@ -237,6 +244,7 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
                 log.Printf("Received exit request")
                 d.Ack(false)
                 //os.Exit(0)
+                wg.Done()
                 ch <- true
             default:
                 d.Ack(false)
@@ -248,9 +256,10 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
     log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
     <-forever
     ch.Close()
+    wg.Wait()
 }
 
-func (h MsgHandler) Results(queueName string, fn MsgCallback) {
+func (h MsgHandler) Results(rch chan [][]logol.Match, queueName string, fn MsgCallback) {
     connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
         h.User, h.Password, h.Hostname, h.Port)
     conn, err := amqp.Dial(connUrl)
@@ -350,6 +359,9 @@ func (h MsgHandler) Results(queueName string, fn MsgCallback) {
         }
     }
 
+    wg := sync.WaitGroup{}
+    wg.Add(2)
+
     go func() {
         file, err := os.Create("logol." + queueName + ".out")
         failOnError(err, "Failed to create output file")
@@ -379,6 +391,7 @@ func (h MsgHandler) Results(queueName string, fn MsgCallback) {
                 allMatches := append(result.PrevMatches, result.Matches)
                 matches, _ := json.Marshal(allMatches)
                 fmt.Fprintln(file, "", string(matches))
+                rch <- allMatches
                 log.Printf("%s", matches)
             }else {
                 log.Printf("Max results reached [%d], waiting to end...", maxMatches)
@@ -386,6 +399,7 @@ func (h MsgHandler) Results(queueName string, fn MsgCallback) {
             }
             d.Ack(false)
         }
+        wg.Done()
     }()
 
     go func(ch chan bool) {
@@ -396,7 +410,10 @@ func (h MsgHandler) Results(queueName string, fn MsgCallback) {
         switch msgEvent.Step {
             case STEP_END:
                 log.Printf("Received exit request")
+                //close(rch)
+                wg.Done()
                 d.Ack(false)
+
                 //os.Exit(0)
                 ch <- true
             default:
@@ -408,8 +425,9 @@ func (h MsgHandler) Results(queueName string, fn MsgCallback) {
 
     log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
     <-forever
-
     ch.Close()
+    wg.Wait()
+    close(rch)
 }
 
 
@@ -524,6 +542,9 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
     msgManager.Grammar = g
     */
 
+    wg := sync.WaitGroup{}
+    wg.Add(2)
+
     go func() {
       searchUtilsLoaded := false
       for d := range msgs {
@@ -587,6 +608,7 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
 
         }
       }
+      wg.Done()
     }()
 
     go func(ch chan bool) {
@@ -599,6 +621,7 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
                 log.Printf("Received exit request")
                 d.Ack(false)
                 ch <- true
+                wg.Done()
                 //os.Exit(0)
             case STEP_BAN:
                 ban = true
@@ -614,4 +637,6 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
     <-forever
 
     ch.Close()
+
+    wg.Wait()
 }

@@ -7,11 +7,18 @@ package main
 import (
         "log"
         listener "org.irisa.genouest/logol/lib/listener"
+        logol "org.irisa.genouest/logol/lib/types"
 )
 
 
 func main() {
     log.Printf("Listen to results")
+    resChan := make(chan [][]logol.Match)
     handler := listener.NewMsgHandler("localhost", 5672, "guest", "guest")
-    handler.Results("test", nil)
+    go handler.Results(resChan, "test", nil)
+    nbResults := 0
+    for _ = range resChan {
+        nbResults += 1
+        log.Printf("NbResults:%d", nbResults)
+    }
 }

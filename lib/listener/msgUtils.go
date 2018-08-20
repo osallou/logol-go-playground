@@ -410,26 +410,31 @@ func (m msgManager) handleMessage(result logol.Result) {
             }
 
         }
-        log.Printf("New model match pos: %d, %d", match.Start, match.End)
-        match.Children = result.Matches
+        match, err := m.SearchUtils.PostControl(match, m.Grammar)
+        if ! err {
+            log.Printf("New model match pos: %d, %d", match.Start, match.End)
+            match.Children = result.Matches
 
-        result.Matches = prev_context
+            result.Matches = prev_context
 
-        result.Matches = append(result.Matches, match)
-        result.Step = STEP_NONE
-        result.Position = match.End
-        result.Spacer = false
-        if len(match.YetToBeDefined) > 0 {
-            result.YetToBeDefined = append(result.YetToBeDefined, match)
+            result.Matches = append(result.Matches, match)
+            result.Step = STEP_NONE
+            result.Position = match.End
+            result.Spacer = false
+            if len(match.YetToBeDefined) > 0 {
+                result.YetToBeDefined = append(result.YetToBeDefined, match)
+            }
+
+
+            if result.Iteration < m.Grammar.Models[model].Vars[modelVariable].Model.RepeatMax {
+                log.Printf("Continue iteration for %s, %s", model, modelVariable)
+                m.Client.IncrBy("logol:" + result.Uid + ":count", 1)
+                m.call_model(model, modelVariable, result, result.ContextVars[len(result.ContextVars) - 1])
+            }
+            m.go_next(model, modelVariable, result)
+        } else {
+            m.Client.Incr("logol:" + result.Uid + ":ban")
         }
-
-
-        if result.Iteration < m.Grammar.Models[model].Vars[modelVariable].Model.RepeatMax {
-            log.Printf("Continue iteration for %s, %s", model, modelVariable)
-            m.Client.IncrBy("logol:" + result.Uid + ":count", 1)
-            m.call_model(model, modelVariable, result, result.ContextVars[len(result.ContextVars) - 1])
-        }
-        m.go_next(model, modelVariable, result)
 
     } else {
         match := logol.NewMatch()

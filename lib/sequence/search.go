@@ -186,7 +186,10 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
             log.Printf("skip match at wrong position: %d" , newMatch.Start)
             continue
         }
-        mch <- newMatch
+        newMatch, err := s.PostControl(newMatch, grammar)
+        if ! err {
+            mch <- newMatch
+        }
         // log.Printf("DEBUG matches:%d %d %d", i, newMatch.Start, newMatch.End)
         i++
     }
@@ -274,11 +277,21 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
         newMatch.Start = startResult
         newMatch.End = endResult
         newMatch.Info = curVariable.Value
-        mch <- newMatch
-        // matches = append(matches, newMatch)
-        log.Printf("got match: %d, %d", newMatch.Start, newMatch.End)
+        newMatch, err := s.PostControl(newMatch, grammar)
+        if ! err {
+            mch <- newMatch
+            // matches = append(matches, newMatch)
+            log.Printf("got match: %d, %d", newMatch.Start, newMatch.End)
+        }
     }
     log.Printf("got matches: %d", (len(findResults) - ban))
     close(mch)
     return matches
+}
+
+
+func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar) (newMatch logol.Match, err bool){
+    // TODO
+    newMatch = match
+    return newMatch, false
 }
