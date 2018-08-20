@@ -1,3 +1,5 @@
+// Manage input messages
+
 package logol
 
 
@@ -14,6 +16,7 @@ import (
     "github.com/satori/go.uuid"
 )
 
+// Initialize a connection to redis
 func newRedisClient(host string) (client *redis.Client){
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     host + ":6379",
@@ -26,12 +29,14 @@ func newRedisClient(host string) (client *redis.Client){
 	return redisClient
 }
 
+// Structure managing global access to different tools and information
 type msgManager struct {
     Client *redis.Client
     Ch *amqp.Channel
     Chuid string
     Grammar logol.Grammar
     CassieManager logol.Cassie
+    SearchUtils seq.SearchUtils
 }
 
 func NewMsgManager(host string, ch *amqp.Channel, chuid string) msgManager {
@@ -42,6 +47,12 @@ func NewMsgManager(host string, ch *amqp.Channel, chuid string) msgManager {
     return manager
 }
 
+func (m msgManager) SetSearchUtils(sequencePath string) (seq.SearchUtils){
+    //m.SearchUtils = seq.NewSearchUtils(sequencePath)
+    return seq.NewSearchUtils(sequencePath)
+}
+
+// Get from redis message value from input uid
 func (m msgManager) get(uid string) (result logol.Result, err error) {
     // fetch from redis the message based on provided uid
     // Once fetched, delete it from db
@@ -56,8 +67,8 @@ func (m msgManager) get(uid string) (result logol.Result, err error) {
 }
 
 
+// check for input/output params of model, and set them with current context variables
 func (m msgManager) setParam(contextVars map[string]logol.Match, param []string) ([]logol.Match){
-    // check for input/output params of model, and set them with current context variables
     var res []logol.Match
     for _, modelOutput := range param {
         log.Printf("Set param %s", modelOutput)
@@ -77,6 +88,8 @@ func (m msgManager) setParam(contextVars map[string]logol.Match, param []string)
     return res
 }
 
+
+// Look at next variables and send result info to each of them
 func (m msgManager) go_next(model string, modelVariable string, data logol.Result){
     // Send result to next components in grammar
     nextVars := m.Grammar.Models[model].Vars[modelVariable].Next
@@ -151,6 +164,7 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
     }
 }
 
+// Send message to rabbitmq
 func (m msgManager) publishMessage(queue string, msg amqp.Publishing){
     m.Ch.Publish(
         "", // exchange
@@ -161,11 +175,17 @@ func (m msgManager) publishMessage(queue string, msg amqp.Publishing){
     )
 }
 
+
+// Get a unique identifier
 func (m msgManager) getUid() (string) {
     uid := uuid.Must(uuid.NewV4())
     return uid.String()
 }
 
+
+// Prepare message before sending it to rabbitmq
+//
+// Give a unique id to message, store result in redis and send uid to rabbitmq
 func (m msgManager) prepareMessage(model string, modelVariable string, data logol.Result) (publish_msg amqp.Publishing){
     u1 := uuid.Must(uuid.NewV4())
     sort.Slice(data.Matches, func(i, j int) bool {
@@ -185,9 +205,11 @@ func (m msgManager) prepareMessage(model string, modelVariable string, data logo
     }
     return publish_msg
 }
-func (m msgManager) sendMessage(model string, modelVariable string, data logol.Result, over bool) {
-    // Send current result to specified component or to result queue if over is true (meaning a full match)
 
+// Send current result to specified component or to result queue if over is true (meaning a full match)
+//
+// if some components are not yet defined, then try to define them now and go to result at least
+func (m msgManager) sendMessage(model string, modelVariable string, data logol.Result, over bool) {
     // If over or final check step
     if over || data.Step == STEP_YETTOBEDEFINED {
         if len(data.YetToBeDefined) > 0 {
@@ -274,15 +296,15 @@ func (m msgManager) handleMessage(result logol.Result) {
 
         isModel := m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id].Model.Name != ""
         if isModel {
-            go seq.FixModel(matchChannel, matchToAnalyse)
+            go m.SearchUtils.FixModel(matchChannel, matchToAnalyse)
         } else {
-            go seq.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches, m.CassieManager.Searcher)
+            go m.SearchUtils.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches, m.CassieManager.Searcher)
         }
         result.YetToBeDefined = append(result.YetToBeDefined[:index], result.YetToBeDefined[index+1:]...)
         for match := range matchChannel {
             match.Uid = matchToAnalyse.Uid
             nbMatches += 1
-            seq.UpdateByUid(match, result.Matches)
+            m.SearchUtils.UpdateByUid(match, result.Matches)
             publish_msg := m.prepareMessage("ytbd", "ytbd", result)
             m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
         }
@@ -405,18 +427,18 @@ func (m msgManager) handleMessage(result logol.Result) {
         matchChannel := make(chan logol.Match)
 
         canFindMatch := true
-        if ! seq.CanFind(m.Grammar, &match, model, modelVariable, contextVars) {
+        if ! m.SearchUtils.CanFind(m.Grammar, &match, model, modelVariable, contextVars) {
             canFindMatch = false
             // TODO, store in result.YetToBeDefined, add empty match with var name and model and continue
             // should check and update later on
-            go seq.FindFuture(matchChannel, match, model, modelVariable)
+            go m.SearchUtils.FindFuture(matchChannel, match, model, modelVariable)
         } else {
             if result.Step == STEP_CASSIE {
                 log.Printf("DEBUG in cassie")
-                go seq.FindCassie(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer, m.CassieManager.Searcher)
+                go m.SearchUtils.FindCassie(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer, m.CassieManager.Searcher)
                 result.Step = STEP_NONE
             } else {
-                go seq.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
+                go m.SearchUtils.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
             }
         }
         nextVars := curVariable.Next

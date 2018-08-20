@@ -1,5 +1,8 @@
-package main
+// Listen to result events and write each match to output file
+//
+// Only 1 instance of logolResult should run for a search
 
+package main
 
 import (
         "log"

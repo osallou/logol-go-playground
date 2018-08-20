@@ -60,4 +60,4 @@ run:
    param:
      - R8
 
-sequence: sequence.txt
+sequence: /home/osallou/Development/NOSAVE/gopath/src/org.irisa.genouest/logol/sequence.txt

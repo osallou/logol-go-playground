@@ -27,4 +27,4 @@ run:
  - model: mod1
    param: []
 
-sequence: sequence.txt
+sequence: /home/osallou/Development/NOSAVE/gopath/src/org.irisa.genouest/logol/sequence.txt

@@ -3,7 +3,7 @@ package logol
 import (
     "fmt"
     "log"
-    "io/ioutil"
+    //"io/ioutil"
     "os"
     "strconv"
     "strings"
@@ -22,6 +22,7 @@ type SequenceLru struct {
     Sequence Sequence
 }
 
+// Initialize a Sequence
 func NewSequence(path string) (seq Sequence){
     seq = Sequence{}
     seq.Path = path
@@ -36,14 +37,18 @@ func NewSequence(path string) (seq Sequence){
     return seq
 }
 
+// Initialize a LRU cache for sequence
 func NewSequenceLru(sequence Sequence) (seq SequenceLru){
+    log.Printf("Initialize sequence LRU")
     seq = SequenceLru{}
     seq.Sequence = sequence
     seq.Lru, _ = lru.New(10)
     return seq
 }
 
+// Get content from sequence using LRU cache
 func (s SequenceLru) GetContent(start int, end int) (content string) {
+    log.Printf("Search in sequence %d:%d", start, end)
     keys := s.Lru.Keys()
     sRange := ""
     sStart := 0
@@ -91,6 +96,7 @@ func (s SequenceLru) GetContent(start int, end int) (content string) {
     }
 }
 
+/*
 func (s Sequence) GetSequence() (string) {
     if s.Content == "" {
         content, err := ioutil.ReadFile(s.Path)
@@ -117,4 +123,4 @@ func (s Sequence) GetContent(start int, end int) (content string) {
     }
     content = sequence[start:end]
     return content
-}
+}*/

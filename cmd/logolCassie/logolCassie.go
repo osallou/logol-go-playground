@@ -1,3 +1,5 @@
+// Listen to events needing cassie library (needs cassiopee deb/rpm package)
+
 package main
 
 

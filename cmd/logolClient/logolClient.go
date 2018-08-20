@@ -1,5 +1,6 @@
-package main
+// Test client for logol
 
+package main
 
 import (
         "fmt"

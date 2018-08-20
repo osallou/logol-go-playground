@@ -1,16 +1,30 @@
+//  Search functions and sequence access
 package logol
 
 import (
     "encoding/json"
-    // "fmt"
     "log"
-    //"regexp"
     "github.com/satori/go.uuid"
     logol "org.irisa.genouest/logol/lib/types"
     cassie "org.irisa.genouest/cassiopee"
 )
 
-func FixModel(mch chan logol.Match, match logol.Match) {
+// Sequence handler with methods to search and analyse a variable
+type SearchUtils struct {
+    SequenceHandler SequenceLru
+}
+
+// returns a new handler for sequence
+func NewSearchUtils(sequencePath string) (su SearchUtils){
+    su = SearchUtils{}
+    s := NewSequence(sequencePath)
+    log.Printf("NewSearchUtils, seq size: %d", s.Size)
+    su.SequenceHandler = NewSequenceLru(s)
+    return su
+}
+
+// Update a model attributes according to its children
+func (s SearchUtils) FixModel(mch chan logol.Match, match logol.Match) {
     match.Sub = 0
     match.Indel = 0
     for i, m := range match.Children {
@@ -30,22 +44,17 @@ func FixModel(mch chan logol.Match, match logol.Match) {
     mch <- match
 }
 
-func FindFuture(mch chan logol.Match, match logol.Match, model string, modelVariable string) {
+// Creates a fake match for variables not yet defined
+func (s SearchUtils) FindFuture(mch chan logol.Match, match logol.Match, model string, modelVariable string) {
     tmpMatch := match.Clone()
     tmpMatch.Id = modelVariable
     tmpMatch.Model = model
-    /*
-    tmpMatch := logol.NewMatch()
-    tmpMatch.Id = modelVariable
-    tmpMatch.Model = model
-    tmpMatch.YetToBeDefined = match.YetToBeDefined
-    */
     mch <- tmpMatch
     close(mch)
 }
 
-func UpdateByUid(match logol.Match, matches []logol.Match){
-    // find matching element in array of matches and update ones matching uid
+// find matching element in array of matches and update ones matching uid
+func (s SearchUtils) UpdateByUid(match logol.Match, matches []logol.Match){
     json_m, _ := json.Marshal(match)
     log.Printf("Update match now: %s", json_m)
     if len(matches) == 0 {
@@ -58,14 +67,15 @@ func UpdateByUid(match logol.Match, matches []logol.Match){
             matches[i] = match
             break
         } else {
-            UpdateByUid(match, m.Children)
+            s.UpdateByUid(match, m.Children)
         }
     }
     json_msg, _ := json.Marshal(matches)
     log.Printf("UpdateByUid %s", json_msg)
 }
 
-func FindToBeAnalysed(mch chan logol.Match, grammar logol.Grammar, match logol.Match, matches[]logol.Match, searchHandler cassie.CassieSearch) {
+// Find a variable that could not be found before (due to other constraints)
+func (s SearchUtils) FindToBeAnalysed(mch chan logol.Match, grammar logol.Grammar, match logol.Match, matches[]logol.Match, searchHandler cassie.CassieSearch) {
     contextVars := make(map[string]logol.Match)
     for _, uid := range match.YetToBeDefined {
         for _, m := range matches {
@@ -76,14 +86,15 @@ func FindToBeAnalysed(mch chan logol.Match, grammar logol.Grammar, match logol.M
             }
         }
     }
-    if match.NeedCassie {
-        FindCassie(mch, grammar, match, match.Model, match.Id, contextVars, match.Spacer, searchHandler)
+    if match.Spacer {
+        s.FindCassie(mch, grammar, match, match.Model, match.Id, contextVars, match.Spacer, searchHandler)
     } else {
-        Find(mch, grammar, match, match.Model, match.Id, contextVars, match.Spacer)
+        s.Find(mch, grammar, match, match.Model, match.Id, contextVars, match.Spacer)
     }
 }
 
-func CanFind(grammar logol.Grammar, match *logol.Match, model string, modelVariable string, contextVars map[string]logol.Match) (can bool) {
+// Checks if a variable can be analysed now according to its constraints and current context
+func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model string, modelVariable string, contextVars map[string]logol.Match) (can bool) {
     // TODO should manage different use cases
     // If cannot be found due to 1 variable, find all related vars and add them to match.ytbd
     log.Printf("Test if variable can be defined now")
@@ -113,7 +124,9 @@ func CanFind(grammar logol.Grammar, match *logol.Match, model string, modelVaria
     return true
 }
 
-func Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
+
+// Find a variable in sequence
+func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
     // TODO manage different search use cases
 
     if spacer {
@@ -126,21 +139,22 @@ func Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model 
         return matches
     }
 
-    matches = FindExact(mch, grammar, match, model, modelVariable, contextVars, spacer)
+    matches = s.FindExact(mch, grammar, match, model, modelVariable, contextVars, spacer)
     return matches
 }
 
 
-func FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, searchHandler cassie.CassieSearch) (matches []logol.Match) {
+// Find a variable in sequence using external library cassiopee
+func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, searchHandler cassie.CassieSearch) (matches []logol.Match) {
     log.Printf("Search in Cassie")
     // json_msg, _ := json.Marshal(contextVars)
-    seq := Sequence{grammar.Sequence, 0, ""}
+    // seq := Sequence{grammar.Sequence, 0, ""}
     curVariable := grammar.Models[model].Vars[modelVariable]
     if (curVariable.Value == "" &&
         curVariable.String_constraints.Content != "") {
         contentConstraint := curVariable.String_constraints.Content
         // log.Printf("TRY TO FETCH FROM CV %d", contextVars[contentConstraint].Start)
-        curVariable.Value = seq.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
+        curVariable.Value = s.SequenceHandler.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
         if curVariable.Value == "" {
             close(mch)
             return
@@ -181,14 +195,14 @@ func FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, 
 }
 
 
-func FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
-    // TODO find only non overlapping, func for testing only
-    seq := Sequence{grammar.Sequence, 0, ""}
+// Find an exact pattern in sequence
+func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) (matches []logol.Match) {
+    // seq := Sequence{grammar.Sequence, 0, ""}
     curVariable := grammar.Models[model].Vars[modelVariable]
     if (curVariable.Value == "" &&
         curVariable.String_constraints.Content != "") {
         contentConstraint := curVariable.String_constraints.Content
-        curVariable.Value = seq.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
+        curVariable.Value = s.SequenceHandler.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
         if curVariable.Value == "" {
             close(mch)
             return
@@ -198,21 +212,21 @@ func FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, m
     log.Printf("Search %s at min pos %d, spacer: %t", curVariable.Value, match.MinPosition, spacer)
 
     findResults := make([][2]int, 0)
-    sequence := seq.GetSequence()
-    seqLen := len(sequence)
+    seqLen := s.SequenceHandler.Sequence.Size
+    //sequence := seq.GetSequence()
+    //seqLen := len(sequence)
     patternLen := len(curVariable.Value)
+    log.Printf("Seq size: %d", seqLen)
     for i:=0; i < seqLen - patternLen; i++ {
-        seqPart := sequence[i:i+patternLen]
+        seqPart := s.SequenceHandler.GetContent(i, i + patternLen)
+
+        // seqPart := sequence[i:i+patternLen]
         if seqPart == curVariable.Value {
             elts := [...]int{i, i+patternLen}
             findResults = append(findResults, elts)
         }
     }
-    /*
-    r, _ := regexp.Compile("(" + curVariable.Value + ")")
-    sequence := seq.GetSequence()
-    findResults := r.FindAllStringIndex(sequence, -1)
-    */
+
     ban := 0
     for _, findResult := range findResults {
         startResult := findResult[0]

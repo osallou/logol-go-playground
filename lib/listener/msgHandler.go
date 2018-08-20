@@ -151,6 +151,7 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
         var cassieIndexer cassie.CassieIndexer
         //defer cassie.DeleteCassieIndexer(msgManager.CassieManager.Indexer)
         indexerLoaded := false
+        searchUtilsLoaded := false
 
         for d := range msgs {
             result, err := msgManager.get(string(d.Body[:]))
@@ -179,6 +180,11 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
             }else {
                 log.Printf("Load grammar from cache %s", result.Uid)
                 msgManager.Grammar = g
+            }
+
+            if ! searchUtilsLoaded {
+                msgManager.SearchUtils = msgManager.SetSearchUtils(msgManager.Grammar.Sequence)
+                searchUtilsLoaded = true
             }
 
 
@@ -221,7 +227,7 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
         cassie.DeleteCassieIndexer(cassieIndexer)
     }()
 
-    go func() {
+    go func(ch chan bool) {
       for d := range events {
         log.Printf("Received an event: %s", d.Body)
         msgEvent := MsgEvent{}
@@ -230,16 +236,18 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
             case STEP_END:
                 log.Printf("Received exit request")
                 d.Ack(false)
-                os.Exit(0)
+                //os.Exit(0)
+                ch <- true
             default:
                 d.Ack(false)
         }
       }
-    }()
+    }(forever)
 
 
     log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
     <-forever
+    ch.Close()
 }
 
 func (h MsgHandler) Results(queueName string, fn MsgCallback) {
@@ -380,7 +388,7 @@ func (h MsgHandler) Results(queueName string, fn MsgCallback) {
         }
     }()
 
-    go func() {
+    go func(ch chan bool) {
       for d := range events {
         log.Printf("Received an event: %s", d.Body)
         msgEvent := MsgEvent{}
@@ -389,16 +397,19 @@ func (h MsgHandler) Results(queueName string, fn MsgCallback) {
             case STEP_END:
                 log.Printf("Received exit request")
                 d.Ack(false)
-                os.Exit(0)
+                //os.Exit(0)
+                ch <- true
             default:
                 d.Ack(false)
         }
       }
-    }()
+    }(forever)
 
 
     log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
     <-forever
+
+    ch.Close()
 }
 
 
@@ -514,6 +525,7 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
     */
 
     go func() {
+      searchUtilsLoaded := false
       for d := range msgs {
         log.Printf("Received a message: %s", string(d.Body[:]))
         if ban {
@@ -550,6 +562,13 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
                 msgManager.Grammar = g
             }
 
+            if ! searchUtilsLoaded {
+                //log.Printf("Init sequence lru")
+                msgManager.SearchUtils = msgManager.SetSearchUtils(msgManager.Grammar.Sequence)
+                searchUtilsLoaded = true
+            }
+            log.Printf("##### %d", msgManager.SearchUtils.SequenceHandler.Sequence.Size)
+
 
             log.Printf("Received message: %s", result.MsgTo)
             // TODO to remove, for debug only
@@ -570,7 +589,7 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
       }
     }()
 
-    go func() {
+    go func(ch chan bool) {
       for d := range events {
         log.Printf("Received an event: %s", d.Body)
         msgEvent := MsgEvent{}
@@ -579,7 +598,8 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
             case STEP_END:
                 log.Printf("Received exit request")
                 d.Ack(false)
-                os.Exit(0)
+                ch <- true
+                //os.Exit(0)
             case STEP_BAN:
                 ban = true
                 d.Ack(false)
@@ -587,9 +607,11 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
                 d.Ack(false)
         }
       }
-    }()
+    }(forever)
 
 
     log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
     <-forever
+
+    ch.Close()
 }
