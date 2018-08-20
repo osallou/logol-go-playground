@@ -18,7 +18,7 @@ func TestFindAny(t *testing.T) {
     mch := make(chan logol.Match)
     nbMatches := 0
     log.Printf("Search any match")
-    go seqUtils.FindAny(mch, match, "mod1", "var1", 4, false)
+    go seqUtils.FindAny(mch, match, "mod1", "var1", 4, 4,false)
     for m := range mch {
         log.Printf("Got res %d:%d", m.Start, m.End)
         log.Printf("Found %s", seqUtils.SequenceHandler.GetContent(m.Start, m.End))
@@ -34,6 +34,27 @@ func TestFindAny(t *testing.T) {
     }
 }
 
+func TestFindAnyMultipleSize(t *testing.T) {
+    path := filepath.Join("testdata", "sequence.txt")
+    seqUtils := NewSearchUtils(path)
+
+    match := logol.Match{}
+    match.MinPosition = 2
+    mch := make(chan logol.Match)
+    nbMatches := 0
+    log.Printf("Search any match")
+    go seqUtils.FindAny(mch, match, "mod1", "var1", 4, 6,false)
+    for m := range mch {
+        log.Printf("Got res %d:%d", m.Start, m.End)
+        log.Printf("Found %s", seqUtils.SequenceHandler.GetContent(m.Start, m.End))
+        nbMatches += 1
+    }
+
+    if nbMatches != 3 {
+        t.Errorf("Invalid number of result")
+    }
+}
+
 
 func TestFindAnyWithSpacer(t *testing.T) {
     path := filepath.Join("testdata", "sequence.txt")
@@ -44,7 +65,7 @@ func TestFindAnyWithSpacer(t *testing.T) {
     mch := make(chan logol.Match)
     nbMatches := 0
     log.Printf("Search any match")
-    go seqUtils.FindAny(mch, match, "mod1", "var1", 4, true)
+    go seqUtils.FindAny(mch, match, "mod1", "var1", 4, 4, true)
     for m := range mch {
         log.Printf("Got res %d:%d", m.Start, m.End)
         log.Printf("Found %s", seqUtils.SequenceHandler.GetContent(m.Start, m.End))

@@ -194,26 +194,28 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
     return matches
 }
 
-func (s SearchUtils) FindAny(mch chan logol.Match, match logol.Match, model string, modelVariable string, size int, spacer bool) {
+func (s SearchUtils) FindAny(mch chan logol.Match, match logol.Match, model string, modelVariable string, minSize int, maxSize int, spacer bool) {
     log.Printf("Search any string at min pos %d, spacer: %t", match.MinPosition, spacer)
     seqLen := s.SequenceHandler.Sequence.Size
     //sequence := seq.GetSequence()
     //seqLen := len(sequence)
-    patternLen := size
-    maxSearchIndex := match.MinPosition + 1
-    if spacer {
-        maxSearchIndex = seqLen - patternLen
-    }
-    log.Printf("Loop over %d:%d", match.MinPosition , maxSearchIndex)
-    for i:=match.MinPosition; i < maxSearchIndex; i++ {
-        // seqPart := s.SequenceHandler.GetContent(i, i + patternLen)
-        newMatch := logol.NewMatch()
-        newMatch.Id = modelVariable
-        newMatch.Model = model
-        newMatch.Start = i
-        newMatch.End = i + patternLen
-        newMatch.Info = "*"
-        mch <- newMatch
+    for l:=minSize;l<=maxSize;l ++ {
+        patternLen := l
+        maxSearchIndex := match.MinPosition + 1
+        if spacer {
+            maxSearchIndex = seqLen - patternLen
+        }
+        log.Printf("Loop over %d:%d", match.MinPosition , maxSearchIndex)
+        for i:=match.MinPosition; i < maxSearchIndex; i++ {
+            // seqPart := s.SequenceHandler.GetContent(i, i + patternLen)
+            newMatch := logol.NewMatch()
+            newMatch.Id = modelVariable
+            newMatch.Model = model
+            newMatch.Start = i
+            newMatch.End = i + patternLen
+            newMatch.Info = "*"
+            mch <- newMatch
+        }
     }
     close(mch)
 }
