@@ -6,26 +6,45 @@ import (
         "testing"
         logol "org.irisa.genouest/logol/lib/types"
         "log"
-        "encoding/json"
+        //"encoding/json"
 )
 
 func TestFindApproximate(t *testing.T){
-    /*
+
     res:= IsApproximate("acgt", "acgt", 0, 0, 0, 0)
     resLen := len(res)
     if resLen == 0 {
         t.Errorf("Invalid result")
     }
-    res:= IsApproximate("acgt", "aggt", 0, 1, 0, 0)
+    res= IsApproximate("acgt", "aggt", 0, 1, 0, 0)
+    resLen = len(res)
+    if resLen == 0 {
+        t.Errorf("Invalid result")
+    }
 
     res= IsApproximate("acgt", "accgt", 0, 0, 0, 1)
+    resLen = len(res)
+    if resLen == 0 {
+        t.Errorf("Invalid result")
+    }
     res= IsApproximate("acgt", "acgtttt", 0, 0, 0, 1)
+    resLen = len(res)
+    if resLen == 0 {
+        t.Errorf("Invalid result")
+    }
     res= IsApproximate("acgt", "atttt", 0, 0, 0, 1)
-    */
-    res:= IsApproximate("acgt", "atctttt", 0, 1, 0, 1)
-    json_res, _ := json.Marshal(res)
-    log.Printf("Result approximate: %s", json_res)
-    t.Errorf("Invalid result")
+    resLen = len(res)
+    if resLen != 0 {
+        t.Errorf("Invalid result")
+    }
+    res= IsApproximate("acgt", "atctttt", 0, 1, 0, 1)
+    resLen = len(res)
+    if resLen == 0 {
+        t.Errorf("Invalid result")
+    }
+    //json_res, _ := json.Marshal(res)
+    //log.Printf("Result approximate: %s", json_res)
+
 }
 
 func TestFindAny(t *testing.T) {

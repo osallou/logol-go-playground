@@ -531,7 +531,12 @@ func IsApproximate(m1 string, m2 string, cost int, maxCost int, indel int, maxIn
     }
 
     log.Printf("Compare %s vs %s", m1[0], m2[0])
-    if m1[0] != m2[0] {
+    b1 := DnaString{}
+    b1.Value = m1[0:1]
+    b2 := DnaString{}
+    b2.Value = m2[0:1]
+    if ! IsBioExact(b1, b2.Value) {
+    //if m1[0] != m2[0] {
         log.Printf("Cost: %d <? %d", cost, maxCost)
         if cost < maxCost {
             log.Printf("Try with cost")

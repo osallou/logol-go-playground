@@ -15,6 +15,13 @@ func TestBioIsExact(t *testing.T) {
     }
 
     b1 = DnaString{}
+    b1.Value = "a"
+    b2 = "a"
+    if ! IsBioExact(b1, b2) {
+        t.Errorf("Invalid match")
+    }
+
+    b1 = DnaString{}
     b1.Value = "acgt"
     b2 = "cgtt"
     if IsBioExact(b1, b2) {
