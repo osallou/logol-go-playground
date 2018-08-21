@@ -3,6 +3,7 @@ package logol
 
 import (
     "encoding/json"
+    "fmt"
     "log"
     "github.com/satori/go.uuid"
     //"strconv"
@@ -340,7 +341,6 @@ func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match log
 }
 
 func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, maxCost int, maxDistance int) {
-    //TODO
     curVariable := grammar.Models[model].Vars[modelVariable]
     if (curVariable.Value == "" &&
         curVariable.String_constraints.Content != "") {
@@ -354,7 +354,7 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
         }
     }
 
-    /*
+
     findResults := make([][4]int, 0)
     seqLen := s.SequenceHandler.Sequence.Size
     patternLen := len(curVariable.Value)
@@ -364,17 +364,73 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
         maxStart = seqLen - patternLen + 1
     }
 
-    // log.Printf("seach between %d and %d", minStart, maxStart)
+    log.Printf("seach between %d and %d", minStart, maxStart)
     for i:=minStart; i < maxStart; i++ {
         seqPart := s.SequenceHandler.GetContent(i, i + patternLen + maxDistance)
         // chan on (status bool, cost int, indel int)
-        _ = IsApproximate(curVariable.Value, seqPart, 0, maxCost, 0, maxDistance)
-
-        if ok {
-            elts := [...]int{i, i+patternLength, cost, indel}
-            findResults = append(findResults, elts)
+        approxResults := IsApproximate(curVariable.Value, seqPart, 0, maxCost, 0, 0, maxDistance)
+        nbApproxResults := len(approxResults)
+        if nbApproxResults > 0 {
+            for r:=0;r<nbApproxResults;r++ {
+                approxResult := approxResults[r]
+                length := patternLen + approxResult[2] - approxResult[3]
+                elts := [...]int{i, i+length, approxResult[1], approxResult[2] + approxResult[3]}
+                findResults = append(findResults, elts)
+            }
         }
-    }*/
+    }
+
+
+    uniques := func (input [][4]int) [][4]int {
+        u := make([][4]int, 0, len(input))
+        m := make(map[string][4]int)
+        for _, val := range input {
+            key := fmt.Sprintf("%d-%d-%d-%d", val[0], val[1], val[2], val[3])
+            if _, ok := m[key]; !ok {
+                m[key] = val
+                u = append(u, val)
+            }
+        }
+        return u
+    }
+    // Remove duplicates if indel allowed
+    if maxDistance > 0 {
+        findResults = uniques(findResults)
+    }
+
+    ban := 0
+    for _, findResult := range findResults {
+        startResult := findResult[0]
+        endResult := findResult[1]
+        if ! spacer {
+            if startResult != match.MinPosition {
+                log.Printf("skip match at wrong position: %d" , startResult)
+                ban += 1
+                continue
+            }
+        } else {
+            if startResult < match.MinPosition {
+                log.Printf("skip match at wrong position: %d" , startResult)
+                ban += 1
+                continue
+            }
+        }
+        newMatch := logol.NewMatch()
+        newMatch.Id = modelVariable
+        newMatch.Model = model
+        newMatch.Start = startResult
+        newMatch.End = endResult
+        newMatch.Info = curVariable.Value
+        newMatch.Sub = findResult[2]
+        newMatch.Indel = findResult[3]
+        newMatch, err := s.PostControl(newMatch, grammar, contextVars)
+        if ! err {
+            mch <- newMatch
+            // matches = append(matches, newMatch)
+            log.Printf("got match: %d, %d", newMatch.Start, newMatch.End)
+        }
+    }
+    log.Printf("got matches: %d", (len(findResults) - ban))
 
     close(mch)
 }
@@ -428,6 +484,8 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         newMatch.Id = modelVariable
         newMatch.Model = model
         newMatch.Start = int(elem.GetPos())
+        newMatch.Sub = elem.GetSubst()
+        newMatch.Indel = elem.GetIn() + elem.GetDel()
         pLen := len(curVariable.Value)
         if(elem.GetIn() - elem.GetDel() != 0) {
             pLen = pLen + elem.GetIn() - elem.GetDel()
@@ -486,31 +544,36 @@ func isExact(m1 string, m2 string) (res bool){
     return res
 }
 
-func IsApproximate(m1 string, m2 string, cost int, maxCost int, indel int, maxIndel int) ([][3]int){
-    log.Printf("Start IsApproximate cost: %d, indel %d", cost, indel)
+func IsApproximate(m1 string, m2 string, cost int, maxCost int, in int, del int, maxIndel int) ([][4]int){
+    indel := in + del
+    log.Printf("Start IsApproximate cost: %d, in %d, del %d", cost, in, del)
     m1Len := len(m1)
     m2Len := len(m2)
     log.Printf("Part1:%d %s", m1Len, m1)
     log.Printf("Part2:%d %s", m2Len, m2)
 
-    results := make([][3]int, 0)
+
+    results := make([][4]int, 0)
     if m1Len == 0 && m2Len == 0 {
-        log.Printf("End of comparison")
-        results = append(results, [3]int{m1Len, cost, indel})
+        log.Printf("End of comparison, Match! %d;%d;%d", cost,  in, del)
+        results = append(results, [4]int{m1Len, cost, in, del})
         return results
         //return true, cost, indel
     }
     if m1Len == 0 && m2Len != 0 {
         if indel >= maxIndel {
-            results = append(results, [3]int{m1Len, cost, indel})
+            log.Printf("End of comparison, Match! %d;%d;%d", cost,  in, del)
+            results = append(results, [4]int{m1Len, cost, in, del})
             return results
         }
-        allowedIndels := maxIndel
-        if maxIndel - indel <= m2Len {
-            allowedIndels = indel + m2Len
+        allowedIndels := maxIndel - indel
+        if maxIndel - indel >= m2Len {
+            allowedIndels = m2Len
         }
-        for i:=indel;i<allowedIndels;i++ {
-            results = append(results, [3]int{m1Len, cost, i})
+
+        for i:=0;i<allowedIndels;i++ {
+            log.Printf("End of comparison, Match! %d;%d;%d", cost,  in + i, del)
+            results = append(results, [4]int{m1Len, cost, in + i, del})
         }
         return results
 
@@ -518,13 +581,16 @@ func IsApproximate(m1 string, m2 string, cost int, maxCost int, indel int, maxIn
     }
     if m1Len != 0 && m2Len == 0 {
         if indel >= maxIndel {
+            log.Printf("End of comparison")
             return results
         }
         if maxIndel - indel < m1Len {
+            log.Printf("End of comparison")
             return results
             //return true, cost, maxIndel
         }else {
-            results = append(results, [3]int{m1Len, cost, indel + m1Len})
+            log.Printf("End of comparison, Match! %d;%d;%d", cost, in, del + m1Len)
+            results = append(results, [4]int{m1Len, cost, in, del + m1Len})
             return results
             //return true, cost, indel + m1Len
         }
@@ -540,22 +606,22 @@ func IsApproximate(m1 string, m2 string, cost int, maxCost int, indel int, maxIn
         log.Printf("Cost: %d <? %d", cost, maxCost)
         if cost < maxCost {
             log.Printf("Try with cost")
-            tmpRes := IsApproximate(m1[1:m1Len], m2[1:m2Len], cost + 1, maxCost, indel, maxIndel)
+            tmpRes := IsApproximate(m1[1:m1Len], m2[1:m2Len], cost + 1, maxCost, in, del, maxIndel)
             results = append(results, tmpRes...)
         }
     } else {
         log.Printf("Equal, continue...")
-        tmpRes := IsApproximate(m1[1:m1Len], m2[1:m2Len], cost, maxCost, indel, maxIndel)
+        tmpRes := IsApproximate(m1[1:m1Len], m2[1:m2Len], cost, maxCost, in, del, maxIndel)
         results = append(results, tmpRes...)
     }
     if indel < maxIndel {
         log.Printf("Try with indel")
-        tmpRes := IsApproximate(m1[0:m1Len], m2[1:m2Len], cost, maxCost, indel + 1, maxIndel)
+        tmpRes := IsApproximate(m1[0:m1Len], m2[1:m2Len], cost, maxCost, in + 1, del, maxIndel)
         results = append(results, tmpRes...)
-        tmpRes = IsApproximate(m1[1:m1Len], m2[0:m2Len], cost, maxCost, indel + 1, maxIndel)
+        tmpRes = IsApproximate(m1[1:m1Len], m2[0:m2Len], cost, maxCost, in, del + 1, maxIndel)
         results = append(results, tmpRes...)
     }
-
+    log.Printf("End of comparison")
     return results
 
 }
