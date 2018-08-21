@@ -5,9 +5,12 @@ import (
     // "log"
 )
 
+
 type BioString interface {
     IsExact(s2 string) bool
     IsApproximate(s2 string, subst int, indel int) (bool, int, int)
+    Reverse() string
+    Complement() string
 }
 
 
@@ -15,6 +18,35 @@ type DnaString struct {
     Value string
     // List of morphisms ("a" -> "cg", "g" -> "t",...)
     AllowedMorphisms map[string][]string
+}
+
+func (s DnaString) Complement() (string){
+    complement := ""
+    sLen := len(s.Value)
+    for i:=0;i<sLen;i++ {
+        switch s.Value[i:i+1] {
+        case "a":
+            complement += "t"
+        case "c":
+            complement += "g"
+        case "g":
+            complement += "c"
+        case "t":
+            complement += "a"
+        }
+    }
+    s.Value = complement
+    return s.Value
+}
+
+func (s DnaString) Reverse() (string){
+    reverse := ""
+    sLen := len(s.Value)
+    for i:=0;i<sLen;i++ {
+        reverse += s.Value[sLen - i - 1:sLen - i]
+    }
+    s.Value = reverse
+    return s.Value
 }
 
 func (s DnaString) IsExact(s2 string) bool {

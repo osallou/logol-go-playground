@@ -13,8 +13,8 @@ type Match struct {
     Spacer bool
     Start int
     End int
-    Sub uint
-    Indel uint
+    Sub int
+    Indel int
     Info string
     Children []Match
     MinRepeat int
@@ -22,8 +22,11 @@ type Match struct {
     Duration int64  // Time.UnixNano
     From []string
     YetToBeDefined []string
-    NeedCassie bool
+    //NeedCassie bool
     SavedAs string
+    IsModel bool
+    Overlap bool
+    SpacerVar bool
 }
 func NewMatch() Match {
     match := Match{}
@@ -41,6 +44,12 @@ func CheckMatches(matches []Match) (bool) {
             return false
         }
         if ! m.Spacer {
+            if m.Overlap {
+                if m.End < end_pos {
+                    log.Printf("position does not fit with overlap")
+                    return false
+                }
+            }
             if (m.Start == end_pos || end_pos == 0) {
                 end_pos = m.End
             }
@@ -48,6 +57,7 @@ func CheckMatches(matches []Match) (bool) {
             if (m.Start >= end_pos) {
                 end_pos = m.End
             }else {
+                log.Printf("position does not fit with previous match end")
                 return false
             }
         }
@@ -55,6 +65,7 @@ func CheckMatches(matches []Match) (bool) {
     }
     return true
 }
+
 
 func (m Match) GetById(model string, id string) ([]Match, bool){
     // Parse match and match Children to find elements matching model and var name
@@ -120,6 +131,6 @@ func (m Match) Clone() (clone Match){
     clone.Duration = m.Duration
     clone.YetToBeDefined = m.YetToBeDefined
     clone.Spacer = m.Spacer
-    clone.NeedCassie = m.NeedCassie
+    //clone.NeedCassie = m.NeedCassie
     return clone
 }

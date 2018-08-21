@@ -97,6 +97,7 @@ func (s SearchUtils) FindToBeAnalysed(mch chan logol.Match, grammar logol.Gramma
 // Checks if a variable can be analysed now according to its constraints and current context
 func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model string, modelVariable string, contextVars map[string]logol.Match) (can bool) {
     // TODO should manage different use cases
+    // Manage string struct and negative constraints
     // If cannot be found due to 1 variable, find all related vars and add them to match.ytbd
     log.Printf("Test if variable can be defined now")
     curVariable := grammar.Models[model].Vars[modelVariable]
@@ -119,9 +120,10 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
             return false
         }
     }
+    /*
     if match.Spacer {
         match.NeedCassie = true
-    }
+    }*/
     return true
 }
 
@@ -130,17 +132,35 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
 func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) {
     // TODO manage different search use cases
 
+    curVariable := grammar.Models[model].Vars[modelVariable]
+    // Spacer variable, just set spacer var and continue
+    if curVariable.Value == "_" {
+        fakeMatch := logol.NewMatch()
+        fakeMatch.Id = modelVariable
+        fakeMatch.Model = model
+        fakeMatch.Spacer = true
+        fakeMatch.SpacerVar = true
+        fakeMatch.Start = fakeMatch.MinPosition
+        fakeMatch.End = fakeMatch.MinPosition
+        // fakeMatch.NeedCassie = true
+        mch <- fakeMatch
+        //matches = append(matches, fakeMatch)
+        close(mch)
+        return
+    }
+
     if spacer {
         fakeMatch := logol.NewMatch()
         fakeMatch.Spacer = true
-        fakeMatch.NeedCassie = true
+        // fakeMatch.NeedCassie = true
         mch <- fakeMatch
         //matches = append(matches, fakeMatch)
         close(mch)
         return
         //return matches
     }
-    curVariable := grammar.Models[model].Vars[modelVariable]
+
+    // TODO we suppose here we have only ints, but could be operations on variables
     log.Printf("Size constraints for : %s, %s", curVariable.String_constraints.Size.Min, curVariable.String_constraints.Size.Max)
     if curVariable.String_constraints.Size.Min != "" || curVariable.String_constraints.Size.Max != "" {
         min, _ := strconv.Atoi(curVariable.String_constraints.Size.Min)

@@ -271,6 +271,58 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
 
 }
 
+func (m msgManager) handleYetToBeDefined(result logol.Result, model string, modelVariable string) {
+    index := result.GetFirstMatchAnalysable()
+    if index == -1 {
+        log.Printf("No variable in YetToBeDefined can be analysed, stopping here")
+        m.Client.Incr("logol:" + result.Uid + ":ban")
+        return
+    }
+    if index == -2 {
+        log.Printf("All yet to be defined done, sending result")
+        publish_msg := m.prepareMessage("over", "over", result)
+        m.publishMessage("logol-result-" + m.Chuid, publish_msg)
+        return
+    }
+    if result.YetToBeDefined[index].Spacer && ! result.YetToBeDefined[index].IsModel {
+        // Forward to cassie
+        publish_msg := m.prepareMessage(model, modelVariable, result)
+        m.publishMessage("logol-cassie-" + m.Chuid, publish_msg)
+        return
+    }
+
+    matchToAnalyse := result.YetToBeDefined[index]
+    matchChannel := make(chan logol.Match)
+    // If is model, just look at children to compute and check constraints
+    // TODO manage model case
+
+    // Else find it, forward to cassie if needed
+    nbMatches := 0
+
+    isModel := m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id].Model.Name != ""
+    if isModel {
+        go m.SearchUtils.FixModel(matchChannel, matchToAnalyse)
+    } else {
+        go m.SearchUtils.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches, m.CassieManager.Searcher)
+    }
+    result.YetToBeDefined = append(result.YetToBeDefined[:index], result.YetToBeDefined[index+1:]...)
+    for match := range matchChannel {
+        match.Uid = matchToAnalyse.Uid
+        nbMatches += 1
+        m.SearchUtils.UpdateByUid(match, result.Matches)
+        publish_msg := m.prepareMessage("ytbd", "ytbd", result)
+        m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
+    }
+
+    if nbMatches == 0 {
+        m.Client.Incr("logol:" + result.Uid + ":ban")
+        return
+    }
+    incCount := nbMatches - 1
+    m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
+}
+
+
 func (m msgManager) handleMessage(result logol.Result) {
     // Take result message and search matching data for specified model and var
     model := result.Model
@@ -279,58 +331,8 @@ func (m msgManager) handleMessage(result logol.Result) {
     newContextVars := make(map[string]logol.Match)
     log.Printf("Received message for step %d", result.Step)
     if result.Step == STEP_YETTOBEDEFINED {
-        index := result.GetFirstMatchAnalysable()
-        if index == -1 {
-            log.Printf("No variable in YetToBeDefined can be analysed, stopping here")
-            m.Client.Incr("logol:" + result.Uid + ":ban")
-            return
-        }
-        if index == -2 {
-            log.Printf("All yet to be defined done, sending result")
-            publish_msg := m.prepareMessage("over", "over", result)
-            m.publishMessage("logol-result-" + m.Chuid, publish_msg)
-            return
-        }
-        if result.YetToBeDefined[index].NeedCassie {
-            // Forward to cassie
-            publish_msg := m.prepareMessage(model, modelVariable, result)
-            m.publishMessage("logol-cassie-" + m.Chuid, publish_msg)
-            return
-        }
-
-        matchToAnalyse := result.YetToBeDefined[index]
-        matchChannel := make(chan logol.Match)
-        // If is model, just look at children to compute and check constraints
-        // TODO manage model case
-
-        // Else find it, forward to cassie if needed
-        nbMatches := 0
-
-        isModel := m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id].Model.Name != ""
-        if isModel {
-            go m.SearchUtils.FixModel(matchChannel, matchToAnalyse)
-        } else {
-            go m.SearchUtils.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches, m.CassieManager.Searcher)
-        }
-        result.YetToBeDefined = append(result.YetToBeDefined[:index], result.YetToBeDefined[index+1:]...)
-        for match := range matchChannel {
-            match.Uid = matchToAnalyse.Uid
-            nbMatches += 1
-            m.SearchUtils.UpdateByUid(match, result.Matches)
-            publish_msg := m.prepareMessage("ytbd", "ytbd", result)
-            m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
-        }
-
-        if nbMatches == 0 {
-            m.Client.Incr("logol:" + result.Uid + ":ban")
-            return
-        }
-        incCount := nbMatches - 1
-        m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
-
-
+        m.handleYetToBeDefined(result, model, modelVariable)
         return
-
     }
 
     if result.Step != STEP_CASSIE {
@@ -388,6 +390,7 @@ func (m msgManager) handleMessage(result logol.Result) {
         match.Model = model
         match.Id = modelVariable
         match.Uid = m.getUid()
+        match.IsModel = true
         log.Printf("Create var from model matches")
         // TODO check if some childs are YetToBeDefined, if yes, mark model with YetToBeDefined
         // Sets however what can be done and add subvars to match.YetToBeDefined
@@ -444,6 +447,7 @@ func (m msgManager) handleMessage(result logol.Result) {
             m.call_model(model, modelVariable, result, contextVars)
             return
         }
+        match.Overlap = curVariable.Overlap
         match.Spacer = result.Spacer
 
         match.MinPosition = result.Position
@@ -522,7 +526,13 @@ func (m msgManager) handleMessage(result logol.Result) {
                 result.YetToBeDefined = append(prevYetToBeDefined, match)
 
             }
-            result.Matches = append(prevMatches, match)
+
+            // Spacer variables are not recorded, only sets spacer again
+            if ! match.SpacerVar {
+                result.Matches = append(prevMatches, match)
+            } else {
+                result.Spacer = true
+            }
 
             m.go_next(model, modelVariable, result)
         }

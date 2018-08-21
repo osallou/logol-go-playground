@@ -22,22 +22,31 @@ type SizeConstraint struct {
     Min string
     Max string
 }
-type SConstraint struct {
+type StringConstraint struct {
     Content string
     SaveAs string
     Size SizeConstraint
+    Morphism string // name of morphism
+    Reverse bool
+}
+type StructConstraint struct {
+    Cost string // range [3,4]
+    Distance string // range [10,20]
+    Percent string // %ac:80 80% of ac
 }
 // Define additional constraint on match
 type NegConstraint struct {
     Value string
-    String_constraints SConstraint
+    String_constraints StringConstraint
+    Struct_constraints StructConstraint
 }
 type Variable struct {
     Value string
     Next []string
     Model VariableModel
-    String_constraints SConstraint
+    String_constraints StringConstraint
     Negative_constraints[] NegConstraint
+    Overlap bool
 }
 type Model struct {
     Comment string

@@ -40,3 +40,21 @@ func TestBioIsExactWithMorphism(t *testing.T) {
         t.Errorf("Invalid match")
     }
 }
+
+func TestBioReverse(t *testing.T) {
+    b1 := DnaString{}
+    b1.Value = "aagg"
+    rev := b1.Reverse()
+    if rev != "ggaa" {
+        t.Errorf("Invalid reverse")
+    }
+}
+
+func TestBioComplement(t *testing.T) {
+    b1 := DnaString{}
+    b1.Value = "acgt"
+    rev := b1.Complement()
+    if rev != "tgca" {
+        t.Errorf("Invalid complement")
+    }
+}
