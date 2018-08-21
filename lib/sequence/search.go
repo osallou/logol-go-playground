@@ -319,21 +319,19 @@ func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match log
     } else {
         // Has content constraint
         if curVariable.HasCostConstraint() || curVariable.HasDistanceConstraint(){
-            minCost := -1
             maxCost := -1
-            minDist := -1
             maxDist := -1
             if curVariable.HasCostConstraint() {
-                sminCost, smaxCost := curVariable.GetCostConstraint()
-                minCost, _ = utils.GetRangeValue(sminCost, contextVars)
+                _, smaxCost := curVariable.GetCostConstraint()
+                // minCost, _ = utils.GetRangeValue(sminCost, contextVars)
                 maxCost, _ = utils.GetRangeValue(smaxCost, contextVars)
             }
             if curVariable.HasDistanceConstraint() {
-                sminDist, smaxDist := curVariable.GetDistanceConstraint()
-                minDist, _ = utils.GetRangeValue(sminDist, contextVars)
+                _, smaxDist := curVariable.GetDistanceConstraint()
+                // minDist, _ = utils.GetRangeValue(sminDist, contextVars)
                 maxDist, _ = utils.GetRangeValue(smaxDist, contextVars)
             }
-            s.FindApproximate(mch, grammar, match, model, modelVariable, contextVars, spacer, minCost, maxCost, minDist, maxDist)
+            s.FindApproximate(mch, grammar, match, model, modelVariable, contextVars, spacer, maxCost, maxDist)
         }else{
             s.FindExact(mch, grammar, match, model, modelVariable, contextVars, spacer)
         }
@@ -341,8 +339,43 @@ func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match log
 
 }
 
-func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, minCost int, maxCost int, minDistance int, maxDistance int) {
+func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, maxCost int, maxDistance int) {
     //TODO
+    curVariable := grammar.Models[model].Vars[modelVariable]
+    if (curVariable.Value == "" &&
+        curVariable.String_constraints.Content != "") {
+        contentConstraint := curVariable.String_constraints.Content
+        log.Printf("FindExact, get var content %s", contentConstraint)
+        curVariable.Value = s.SequenceHandler.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
+        log.Printf("? %s",curVariable.Value)
+        if curVariable.Value == "" {
+            close(mch)
+            return
+        }
+    }
+
+    /*
+    findResults := make([][4]int, 0)
+    seqLen := s.SequenceHandler.Sequence.Size
+    patternLen := len(curVariable.Value)
+    minStart := match.MinPosition
+    maxStart := match.MinPosition + 1
+    if match.Spacer {
+        maxStart = seqLen - patternLen + 1
+    }
+
+    // log.Printf("seach between %d and %d", minStart, maxStart)
+    for i:=minStart; i < maxStart; i++ {
+        seqPart := s.SequenceHandler.GetContent(i, i + patternLen + maxDistance)
+        // chan on (status bool, cost int, indel int)
+        _ = IsApproximate(curVariable.Value, seqPart, 0, maxCost, 0, maxDistance)
+
+        if ok {
+            elts := [...]int{i, i+patternLength, cost, indel}
+            findResults = append(findResults, elts)
+        }
+    }*/
+
     close(mch)
 }
 
@@ -362,6 +395,23 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
             return
         }
     }
+    maxCost := -1
+    maxDist := -1
+    if curVariable.HasCostConstraint() {
+        _, smaxCost := curVariable.GetCostConstraint()
+        maxCost, _ = utils.GetRangeValue(smaxCost, contextVars)
+    }
+    if curVariable.HasDistanceConstraint() {
+        _, smaxDist := curVariable.GetDistanceConstraint()
+        maxDist, _ = utils.GetRangeValue(smaxDist, contextVars)
+    }
+    if maxDist > 0 {
+        searchHandler.SetMax_indel(maxDist)
+    }
+    if maxCost > 0 {
+        searchHandler.SetMax_subst(maxCost)
+    }
+    searchHandler.SetAmbiguity(true)
 
     searchHandler.Search(curVariable.Value)
     searchHandler.Sort()
@@ -436,6 +486,76 @@ func isExact(m1 string, m2 string) (res bool){
     return res
 }
 
+func IsApproximate(m1 string, m2 string, cost int, maxCost int, indel int, maxIndel int) ([][3]int){
+    log.Printf("Start IsApproximate cost: %d, indel %d", cost, indel)
+    m1Len := len(m1)
+    m2Len := len(m2)
+    log.Printf("Part1:%d %s", m1Len, m1)
+    log.Printf("Part2:%d %s", m2Len, m2)
+
+    results := make([][3]int, 0)
+    if m1Len == 0 && m2Len == 0 {
+        log.Printf("End of comparison")
+        results = append(results, [3]int{m1Len, cost, indel})
+        return results
+        //return true, cost, indel
+    }
+    if m1Len == 0 && m2Len != 0 {
+        if indel >= maxIndel {
+            results = append(results, [3]int{m1Len, cost, indel})
+            return results
+        }
+        allowedIndels := maxIndel
+        if maxIndel - indel <= m2Len {
+            allowedIndels = indel + m2Len
+        }
+        for i:=indel;i<allowedIndels;i++ {
+            results = append(results, [3]int{m1Len, cost, i})
+        }
+        return results
+
+
+    }
+    if m1Len != 0 && m2Len == 0 {
+        if indel >= maxIndel {
+            return results
+        }
+        if maxIndel - indel < m1Len {
+            return results
+            //return true, cost, maxIndel
+        }else {
+            results = append(results, [3]int{m1Len, cost, indel + m1Len})
+            return results
+            //return true, cost, indel + m1Len
+        }
+    }
+
+    log.Printf("Compare %s vs %s", m1[0], m2[0])
+    if m1[0] != m2[0] {
+        log.Printf("Cost: %d <? %d", cost, maxCost)
+        if cost < maxCost {
+            log.Printf("Try with cost")
+            tmpRes := IsApproximate(m1[1:m1Len], m2[1:m2Len], cost + 1, maxCost, indel, maxIndel)
+            results = append(results, tmpRes...)
+        }
+    } else {
+        log.Printf("Equal, continue...")
+        tmpRes := IsApproximate(m1[1:m1Len], m2[1:m2Len], cost, maxCost, indel, maxIndel)
+        results = append(results, tmpRes...)
+    }
+    if indel < maxIndel {
+        log.Printf("Try with indel")
+        tmpRes := IsApproximate(m1[0:m1Len], m2[1:m2Len], cost, maxCost, indel + 1, maxIndel)
+        results = append(results, tmpRes...)
+        tmpRes = IsApproximate(m1[1:m1Len], m2[0:m2Len], cost, maxCost, indel + 1, maxIndel)
+        results = append(results, tmpRes...)
+    }
+
+    return results
+
+}
+
+
 // Find an exact pattern in sequence
 func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) {
     // seq := Sequence{grammar.Sequence, 0, ""}
@@ -459,8 +579,15 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
     //sequence := seq.GetSequence()
     //seqLen := len(sequence)
     patternLen := len(curVariable.Value)
-    for i:=0; i < seqLen - patternLen; i++ {
+    minStart := match.MinPosition
+    maxStart := match.MinPosition + 1
+    if match.Spacer {
+        maxStart = seqLen - patternLen + 1
+    }
+    // log.Printf("seach between %d and %d", minStart, maxStart)
+    for i:=minStart; i < maxStart; i++ {
         seqPart := s.SequenceHandler.GetContent(i, i + patternLen)
+
 
         // seqPart := sequence[i:i+patternLen]
         if isExact(seqPart, curVariable.Value) {
@@ -557,7 +684,7 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
     if curVariable.HasPercentConstraint(){
         log.Printf("Control percent of alphabet")
         alphabet, percent, _ := curVariable.GetPercentConstraint()
-        doMatch := utils.CheckAlphabetPercent(seqPart, alphabet, percent)
+        doMatch, _ := utils.CheckAlphabetPercent(seqPart, alphabet, percent)
         if ! doMatch {
             return newMatch, true
         }
