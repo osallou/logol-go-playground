@@ -5,10 +5,13 @@ import (
     "encoding/json"
     "log"
     "github.com/satori/go.uuid"
-    "strconv"
+    //"strconv"
     logol "org.irisa.genouest/logol/lib/types"
     cassie "org.irisa.genouest/cassiopee"
+    utils "org.irisa.genouest/logol/lib/utils"
 )
+
+const MAX_MATCH_SIZE = 1000
 
 // Sequence handler with methods to search and analyse a variable
 type SearchUtils struct {
@@ -99,8 +102,123 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
     // TODO should manage different use cases
     // Manage string struct and negative constraints
     // If cannot be found due to 1 variable, find all related vars and add them to match.ytbd
+
+    /*
+    String constraint:
+        Content string
+        Size RangeConstraint
+        Start RangeConstraint
+        End RangeConstraint
+    Struct constraint:
+        Cost string // range [3,4]
+        Distance string // range [10,20]
+    */
+
+    uniques := func (input []string) []string {
+    	u := make([]string, 0, len(input))
+    	m := make(map[string]bool)
+    	for _, val := range input {
+    		if _, ok := m[val]; !ok {
+    			m[val] = true
+    			u = append(u, val)
+    		}
+    	}
+    	return u
+    }
     log.Printf("Test if variable can be defined now")
     curVariable := grammar.Models[model].Vars[modelVariable]
+    hasUndefined := false
+    undefinedVars := make([]string, 0)
+    _hasUndefined, _undefinedVars := utils.HasUndefinedRangeVars(curVariable.Value, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Content, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Min, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Max, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Start.Min, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Start.Max, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.End.Min, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.End.Max, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Cost.Min, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Cost.Max, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Distance.Min, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Distance.Max, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+
+    undefinedVars = uniques(undefinedVars)
+
+    nbUndefinedVars := len(undefinedVars)
+    for i:=0;i<nbUndefinedVars;i++ {
+            contentConstraint := undefinedVars[i]
+            content, ok := contextVars[contentConstraint]
+            if ! ok {
+                log.Printf("Depends on undefined variable %s", contentConstraint)
+                m := logol.NewMatch()
+                m.Uid = uuid.Must(uuid.NewV4()).String()
+                contextVars[contentConstraint] = m
+                match.YetToBeDefined = append(match.YetToBeDefined, m.Uid)
+                // fmt.Printf("YetToBeDefined: %v", match.YetToBeDefined)
+                return false
+            }
+            if (content.Start == -1 || content.End == -1) {
+                log.Printf("Depends on non available variable %s", contentConstraint)
+                match.YetToBeDefined = append(match.YetToBeDefined, content.Uid)
+                return false
+            }
+    }
+    if hasUndefined {
+        return false
+    } else {
+        return true
+    }
+
+    /*
     if (curVariable.Value == "" &&
         curVariable.String_constraints.Content != "") {
         contentConstraint := curVariable.String_constraints.Content
@@ -120,11 +238,10 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
             return false
         }
     }
-    /*
-    if match.Spacer {
-        match.NeedCassie = true
-    }*/
+
+
     return true
+    */
 }
 
 
@@ -160,11 +277,35 @@ func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match log
         //return matches
     }
 
-    // TODO we suppose here we have only ints, but could be operations on variables
-    log.Printf("Size constraints for : %s, %s", curVariable.String_constraints.Size.Min, curVariable.String_constraints.Size.Max)
-    if curVariable.String_constraints.Size.Min != "" || curVariable.String_constraints.Size.Max != "" {
-        min, _ := strconv.Atoi(curVariable.String_constraints.Size.Min)
-        max, _ := strconv.Atoi(curVariable.String_constraints.Size.Max)
+    if curVariable.HasStartConstraint(){
+        // Check current position
+        minStart, maxStart := curVariable.GetStartConstraint()
+        min, _ := utils.GetRangeValue(minStart, contextVars)
+        max, _ := utils.GetRangeValue(maxStart, contextVars)
+        if ! curVariable.Overlap {
+            if (min != -1 && match.MinPosition < min) || (max != -1 && match.MinPosition > max) {
+                close(mch)
+                return
+            }
+        } else {
+            log.Printf("Skipping start constraint for the moment as overlap is allowed")
+        }
+    }
+
+    if curVariable.HasSizeConstraint() && ! curVariable.HasContentConstraint(){
+        log.Printf("Size constraint but no content constraint, take any chars")
+        min, err := utils.GetRangeValue(curVariable.String_constraints.Size.Min, contextVars)
+        if err {
+            log.Printf("Could not interpret constraint, skipping it: %s", curVariable.String_constraints.Size.Min)
+            min = 1
+        }
+        max, err := utils.GetRangeValue(curVariable.String_constraints.Size.Min, contextVars)
+        if err {
+            log.Printf("Could not interpret constraint, skipping it: %s", curVariable.String_constraints.Size.Max)
+            max = MAX_MATCH_SIZE
+        }
+        //min, _ := strconv.Atoi(curVariable.String_constraints.Size.Min)
+        //max, _ := strconv.Atoi(curVariable.String_constraints.Size.Max)
         s.FindAny(
             mch ,
             grammar,
@@ -176,11 +317,34 @@ func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match log
             contextVars,
             spacer)
     } else {
-        s.FindExact(mch, grammar, match, model, modelVariable, contextVars, spacer)
+        // Has content constraint
+        if curVariable.HasCostConstraint() || curVariable.HasDistanceConstraint(){
+            minCost := -1
+            maxCost := -1
+            minDist := -1
+            maxDist := -1
+            if curVariable.HasCostConstraint() {
+                sminCost, smaxCost := curVariable.GetCostConstraint()
+                minCost, _ = utils.GetRangeValue(sminCost, contextVars)
+                maxCost, _ = utils.GetRangeValue(smaxCost, contextVars)
+            }
+            if curVariable.HasDistanceConstraint() {
+                sminDist, smaxDist := curVariable.GetDistanceConstraint()
+                minDist, _ = utils.GetRangeValue(sminDist, contextVars)
+                maxDist, _ = utils.GetRangeValue(smaxDist, contextVars)
+            }
+            s.FindApproximate(mch, grammar, match, model, modelVariable, contextVars, spacer, minCost, maxCost, minDist, maxDist)
+        }else{
+            s.FindExact(mch, grammar, match, model, modelVariable, contextVars, spacer)
+        }
     }
 
 }
 
+func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, minCost int, maxCost int, minDistance int, maxDistance int) {
+    //TODO
+    close(mch)
+}
 
 // Find a variable in sequence using external library cassiopee
 func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, searchHandler cassie.CassieSearch) (matches []logol.Match) {
@@ -348,9 +512,61 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
     newMatch = match
     log.Printf("PostControl checks")
 
+    curVariable := grammar.Models[match.Model].Vars[match.Id]
+    if curVariable.HasStartConstraint(){
+        log.Printf("Control start")
+        minS, maxS := curVariable.GetStartConstraint()
+        min, _ := utils.GetRangeValue(minS, contextVars)
+        max, _ := utils.GetRangeValue(maxS, contextVars)
+        if (min != -1 && match.Start < min) || (max != -1 && match.Start > max) {
+            return newMatch, true
+        }
+    }
+    if curVariable.HasEndConstraint(){
+        log.Printf("Control end")
+        minS, maxS := curVariable.GetEndConstraint()
+        min, _ := utils.GetRangeValue(minS, contextVars)
+        max, _ := utils.GetRangeValue(maxS, contextVars)
+        if (min != -1 && match.End < min) || (max != -1 && match.End > max) {
+            return newMatch, true
+        }
+    }
+
+    if curVariable.HasCostConstraint(){
+        log.Printf("Control cost")
+        minS, maxS := curVariable.GetCostConstraint()
+        min, _ := utils.GetRangeValue(minS, contextVars)
+        max, _ := utils.GetRangeValue(maxS, contextVars)
+        if (min != -1 && match.Sub < min) || (max != -1 && match.Sub > max) {
+            return newMatch, true
+        }
+    }
+
+    if curVariable.HasDistanceConstraint(){
+        log.Printf("Control distance")
+        minS, maxS := curVariable.GetDistanceConstraint()
+        min, _ := utils.GetRangeValue(minS, contextVars)
+        max, _ := utils.GetRangeValue(maxS, contextVars)
+        if (min != -1 && match.Indel < min) || (max != -1 && match.Indel > max) {
+            return newMatch, true
+        }
+    }
+
     seqPart := s.SequenceHandler.GetContent(match.Start, match.End)
+
+    if curVariable.HasPercentConstraint(){
+        log.Printf("Control percent of alphabet")
+        alphabet, percent, _ := curVariable.GetPercentConstraint()
+        doMatch := utils.CheckAlphabetPercent(seqPart, alphabet, percent)
+        if ! doMatch {
+            return newMatch, true
+        }
+    }
+
+
+
     log.Printf("Check negative constraints")
-    negConstraints := grammar.Models[match.Model].Vars[match.Id].Negative_constraints
+    negConstraints := curVariable.Negative_constraints
     if len(negConstraints) > 0 {
         for _, negConstraint := range negConstraints {
             if negConstraint.Value == "" {

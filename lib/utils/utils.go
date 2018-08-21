@@ -39,17 +39,21 @@ func getPropertyValueFromContext(property int, variable string, contextVars map[
 }
 
 func getProperty(expr string) (prop int, variable string, err bool) {
-    if expr[0:2] == "@@" {
-        return PROP_END, expr[2:len(expr)-1], false
+    exprLen := len(expr)
+    if exprLen > 2 && expr[0:2] == "@@" {
+        return PROP_END, expr[2:len(expr)], false
     }
-    if expr[0:1] == "@" {
-        return PROP_START, expr[1:len(expr)-1], false
+    if exprLen > 1 && expr[0:1] == "@" {
+        return PROP_START, expr[1:len(expr)], false
     }
-    if expr[0:2] == "$$" {
-        return PROP_INDEL, expr[2:len(expr)-1], false
+    if exprLen > 2 && expr[0:2] == "$$" {
+        return PROP_INDEL, expr[2:len(expr)], false
     }
-    if expr[0:1] == "$" {
-        return PROP_SUBST, expr[1:len(expr)-1], false
+    if exprLen > 1 && expr[0:1] == "$" {
+        return PROP_SUBST, expr[1:len(expr)], false
+    }
+    if exprLen > 1 && expr[0:1] == "?" {
+        return PROP_CONTENT, expr[1:len(expr)], false
     }
     return  0, "", true
 }
@@ -70,10 +74,55 @@ func getValueFromExpression(expr string, contextVars map[string]logol.Match) (va
     return getPropertyValueFromContext(prop, variable, contextVars)
 }
 
+// check if an operation contains unknown or not defined variables
+func HasUndefinedRangeVars(expr string, contextVars map[string]logol.Match) (hasUndefined bool, undefinedVars []string) {
+    if expr == "" {
+        return false, undefinedVars
+    }
+    if expr == "_" {
+        return false, undefinedVars
+    }
+    hasUndefined = false
+    undefinedVars = make([]string, 0)
+    elts := strings.Split(expr, " ")
+
+    testProp := func (elt string) (bool, string){
+        _, variable, err := getProperty(elt)
+        if ! err {
+            if contextVars == nil {
+                return true, variable
+            }
+            ctxVar, ok := contextVars[variable]
+            if ! ok || ctxVar.Start == -1 || ctxVar.End == -1 {
+                return true, variable
+            }
+        }
+        return false, ""
+    }
+
+    undef, undefVar := testProp(elts[0])
+    if undef {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, undefVar)
+    }
+
+    if len(elts) > 1 {
+        undef, undefVar := testProp(elts[2])
+        if undef {
+            hasUndefined = true
+            undefinedVars = append(undefinedVars, undefVar)
+        }
+    }
+
+    return hasUndefined, undefinedVars
+}
 // Calculate expression
 //
 // Examples: 12 , 1 + @R1 , @R1 * @R2, etc.
 func GetRangeValue(expr string, contextVars map[string]logol.Match) (val int, err bool){
+    if expr == "" {
+        return -1, false
+    }
     if expr == "_" {
         return -1, false
     }
@@ -105,4 +154,24 @@ func GetRangeValue(expr string, contextVars map[string]logol.Match) (val int, er
         }
     }
     return 0, false
+}
+
+func CheckAlphabetPercent(seqPart string, alphabet string, percent int) (bool, int) {
+    nbMatch := 0
+    seqPartLen := len(seqPart)
+    alphalen := len(alphabet)
+    for i:=0;i<seqPartLen;i++ {
+        for j:=0;j<alphalen;j++ {
+            if seqPart[i] == alphabet[j]{
+                nbMatch += 1
+                break
+            }
+        }
+    }
+    percentMatch := nbMatch * 100 / seqPartLen
+    log.Printf("Percent match: %d vs %d", percentMatch, percent)
+    if percentMatch >= percent {
+        return true, percentMatch
+    }
+    return false, percentMatch
 }
