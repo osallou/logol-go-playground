@@ -160,3 +160,25 @@ func TestGrammar(t *testing.T) {
     }
 
 }
+
+func TestNegConstraint(t *testing.T) {
+    //handler := Handler{}
+    log.Printf("Test negative constraint")
+    grammar := filepath.Join("testdata", "negative_constraint.txt")
+    resChan := make(chan [][]logol.Match)
+    result := startGrammar(resChan, grammar)
+    json_msg, _ := json.Marshal(result)
+    log.Printf("Result: %s", json_msg)
+    if len(result) != 1 {
+        t.Errorf("Invalid number of model")
+    }
+    model1 := result[0]
+    var1 := model1[0]
+    if var1.Start != 4 && var1.End != 10 {
+        t.Errorf("Invalid result: %s", json_msg)
+    }
+    var2 := model1[1]
+    if var2.Start != 10 && var2.End != 15 {
+        t.Errorf("Invalid result: %s", json_msg)
+    }
+}

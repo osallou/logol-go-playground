@@ -300,7 +300,7 @@ func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match log
             log.Printf("Could not interpret constraint, skipping it: %s", curVariable.String_constraints.Size.Min)
             min = 1
         }
-        max, err := utils.GetRangeValue(curVariable.String_constraints.Size.Min, contextVars)
+        max, err := utils.GetRangeValue(curVariable.String_constraints.Size.Max, contextVars)
         if err {
             log.Printf("Could not interpret constraint, skipping it: %s", curVariable.String_constraints.Size.Max)
             max = MAX_MATCH_SIZE
@@ -367,7 +367,6 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
     log.Printf("seach between %d and %d", minStart, maxStart)
     for i:=minStart; i < maxStart; i++ {
         seqPart := s.SequenceHandler.GetContent(i, i + patternLen + maxDistance)
-        // chan on (status bool, cost int, indel int)
         approxResults := IsApproximate(curVariable.Value, seqPart, 0, maxCost, 0, 0, maxDistance)
         nbApproxResults := len(approxResults)
         if nbApproxResults > 0 {
@@ -436,7 +435,7 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
 }
 
 // Find a variable in sequence using external library cassiopee
-func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, searchHandler cassie.CassieSearch) (matches []logol.Match) {
+func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, searchHandler cassie.CassieSearch) {
     log.Printf("Search in Cassie")
     // json_msg, _ := json.Marshal(contextVars)
     // seq := Sequence{grammar.Sequence, 0, ""}
@@ -504,7 +503,6 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         i++
     }
     close(mch)
-    return matches
 }
 
 func (s SearchUtils) FindAny(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, minSize int, maxSize int, contextVars map[string]logol.Match, spacer bool) {
@@ -512,6 +510,7 @@ func (s SearchUtils) FindAny(mch chan logol.Match, grammar logol.Grammar, match 
     seqLen := s.SequenceHandler.Sequence.Size
     //sequence := seq.GetSequence()
     //seqLen := len(sequence)
+    log.Printf("Extract string of size %d -> %d", minSize, maxSize)
     for l:=minSize;l<=maxSize;l ++ {
         patternLen := l
         maxSearchIndex := match.MinPosition + 1
@@ -773,7 +772,7 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
             }
             b1 := DnaString{}
             b1.Value = negConstraint.Value
-            log.Printf("Has negative constraint, check against %s", b1.Value)
+            log.Printf("Has negative constraint, check %s against %s", seqPart, b1.Value)
             if IsBioExact(b1, seqPart) {
                 return newMatch, true
             }
