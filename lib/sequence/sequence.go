@@ -48,7 +48,7 @@ func NewSequenceLru(sequence Sequence) (seq SequenceLru){
 
 // Get content from sequence using LRU cache
 func (s SequenceLru) GetContent(start int, end int) (content string) {
-    //log.Printf("Search in sequence %d:%d", start, end)
+    log.Printf("Search in sequence %d:%d", start, end)
     keys := s.Lru.Keys()
     sRange := ""
     sStart := 0

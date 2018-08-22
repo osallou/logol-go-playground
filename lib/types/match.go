@@ -27,6 +27,7 @@ type Match struct {
     IsModel bool
     Overlap bool
     SpacerVar bool
+    Reverse bool
 }
 func NewMatch() Match {
     match := Match{}

@@ -3,8 +3,39 @@ package logol
 
 import (
         "testing"
-        //"log"
+        "log"
 )
+
+func TestMorphisms(t *testing.T) {
+    b1 := DnaString{}
+    b1.Value = "acgt"
+    ch := make(chan string)
+    go b1.GetMorphisms(ch)
+    nbMatch := 0
+    for s := range ch {
+        nbMatch += 1
+        log.Printf("Match: %s", s)
+    }
+    if nbMatch != 1 {
+        t.Errorf("Invalid matches: %d", nbMatch)
+    }
+    ch = make(chan string)
+    b1.AllowedMorphisms = make(map[string][]string)
+    maps := make([]string, 2)
+    maps[0] = "a"
+    maps[1] = "g"
+    b1.AllowedMorphisms["c"] = maps
+
+    go b1.GetMorphisms(ch)
+    nbMatch = 0
+    for s := range ch {
+        nbMatch += 1
+        log.Printf("Match: %s", s)
+    }
+    if nbMatch != 2 {
+        t.Errorf("Invalid matches: %d", nbMatch)
+    }
+}
 
 func TestBioIsExact(t *testing.T) {
     b1 := DnaString{}

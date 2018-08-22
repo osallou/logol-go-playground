@@ -447,6 +447,9 @@ func (m msgManager) handleMessage(result logol.Result) {
             m.call_model(model, modelVariable, result, contextVars)
             return
         }
+        if curVariable.HasReverseConstraint() {
+            match.Reverse = true
+        }
         match.Overlap = curVariable.Overlap
         match.Spacer = result.Spacer
 

@@ -73,7 +73,7 @@ type MainModel struct {
 }
 
 type Grammar struct {
-    Morphisms []Morphism
+    Morphisms map[string]Morphism
     Models map[string]Model
     Run []MainModel
     Sequence string
@@ -172,4 +172,7 @@ func(lvar Variable) GetContentConstraint() (content string, isFixed bool, err bo
         return lvar.String_constraints.Content, false, false
     }
     return "", false, true
+}
+func(lvar Variable) HasReverseConstraint() bool {
+    return  lvar.String_constraints.Reverse
 }

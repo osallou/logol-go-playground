@@ -1,7 +1,9 @@
 morphisms:
-  - foo:
-    - a
-    - g
+    foo:
+      a:
+          - g
+      g:
+          - a
 models:
   mod2:
     comment: 'mod2(+R2)'

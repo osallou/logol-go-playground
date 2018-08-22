@@ -2,7 +2,7 @@ package logol
 
 import (
     "strings"
-    // "log"
+    "log"
 )
 
 
@@ -11,6 +11,7 @@ type BioString interface {
     IsApproximate(s2 string, subst int, indel int) (bool, int, int)
     Reverse() string
     Complement() string
+    GetMorphisms(chan string)
 }
 
 
@@ -18,6 +19,47 @@ type DnaString struct {
     Value string
     // List of morphisms ("a" -> "cg", "g" -> "t",...)
     AllowedMorphisms map[string][]string
+}
+
+func NewDnaString(value string) (ds DnaString) {
+    ds = DnaString{}
+    ds.Value = value
+    return ds
+}
+
+func (s DnaString) getMorphism(ch chan string, part string, index int) {
+    log.Printf("GetMorphisms %s, %d", part, index)
+    sLen := len(part)
+    if index >= sLen {
+        ch <- part
+        return
+    }
+    sChar := s.Value[index:index+1]
+    morphs, ok := s.AllowedMorphisms[sChar]
+    if ! ok {
+        // continue
+        s.getMorphism(ch, part, index + 1)
+    } else {
+        // replace char at index by all possibilities and continue
+        nbMorph := len(morphs)
+        for l:=0;l<nbMorph;l++ {
+            part = part[:index] + morphs[l] + part[index+1:]
+            s.getMorphism(ch, part, index + 1)
+        }
+    }
+}
+
+// Get all possible conversions with defined morphism
+func (s DnaString) GetMorphisms(ch chan string) {
+    log.Printf("GetMorphisms")
+    if s.AllowedMorphisms == nil {
+        log.Printf("No morhpisms defined")
+        ch <- s.Value
+        close(ch)
+        return
+    }
+    s.getMorphism(ch, s.Value, 0)
+    close(ch)
 }
 
 func (s DnaString) Complement() (string){

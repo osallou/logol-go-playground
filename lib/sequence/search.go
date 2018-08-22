@@ -366,7 +366,12 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
 
     log.Printf("seach between %d and %d", minStart, maxStart)
     for i:=minStart; i < maxStart; i++ {
-        seqPart := s.SequenceHandler.GetContent(i, i + patternLen + maxDistance)
+        seqPart := s.SequenceHandler.GetContent(i, i + patternLen + 1+ maxDistance)
+
+        bioString := NewDnaString(curVariable.Value)
+        if match.Reverse {
+            curVariable.Value = bioString.Reverse()
+        }
         approxResults := IsApproximate(curVariable.Value, seqPart, 0, maxCost, 0, 0, maxDistance)
         nbApproxResults := len(approxResults)
         if nbApproxResults > 0 {
@@ -468,15 +473,23 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
     }
     searchHandler.SetAmbiguity(true)
 
+    bioString := NewDnaString(curVariable.Value)
+    if match.Reverse {
+        curVariable.Value = bioString.Reverse()
+    }
+
     searchHandler.Search(curVariable.Value)
     searchHandler.Sort()
+    searchHandler.RemoveDuplicates()
+    /*
     if searchHandler.GetMax_indel() > 0 {
         searchHandler.RemoveDuplicates()
-    }
+    }*/
     smatches := cassie.GetMatchList(searchHandler)
     msize := smatches.Size()
     var i int64
     i = 0
+    log.Printf("Cassie found %d solutions", msize)
     for i < msize {
         elem := smatches.Get(int(i))
         newMatch := logol.NewMatch()
@@ -491,6 +504,7 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         }
         newMatch.End = int(elem.GetPos()) + pLen
         newMatch.Info = curVariable.Value
+        log.Printf("Cassie found %d:%d:%d:%d", newMatch.Start, newMatch.End, newMatch.Sub, newMatch.Indel)
         if newMatch.Start < match.MinPosition {
             log.Printf("skip match at wrong position: %d" , newMatch.Start)
             continue
@@ -537,7 +551,7 @@ func (s SearchUtils) FindAny(mch chan logol.Match, grammar logol.Grammar, match 
     close(mch)
 }
 
-
+// compare pattern vs sequence
 func isExact(m1 string, m2 string) (res bool){
     res = m1 == m2
     return res
@@ -658,9 +672,12 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
     for i:=minStart; i < maxStart; i++ {
         seqPart := s.SequenceHandler.GetContent(i, i + patternLen)
 
-
+        bioString := NewDnaString(curVariable.Value)
+        if match.Reverse {
+            curVariable.Value = bioString.Reverse()
+        }
         // seqPart := sequence[i:i+patternLen]
-        if isExact(seqPart, curVariable.Value) {
+        if isExact(curVariable.Value, seqPart) {
             elts := [...]int{i, i+patternLen}
             findResults = append(findResults, elts)
         }

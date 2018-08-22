@@ -200,6 +200,8 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
                 cassieIndexer.SetMax_depth(10000)
                 cassieIndexer.SetDo_reduction(true)
                 cassieIndexer.Index()
+                //cassieIndexer.Save()
+                //cassieIndexer.Graph()
                 indexerLoaded = true
             }
             log.Printf("Load cassie searcher")
