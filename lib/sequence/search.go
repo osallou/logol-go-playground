@@ -372,7 +372,11 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
         if match.Reverse {
             curVariable.Value = bioString.Reverse()
         }
-        approxResults := IsApproximate(curVariable.Value, seqPart, 0, maxCost, 0, 0, maxDistance)
+        if curVariable.HasMorphism() {
+            bioString.SetMorphisms(curVariable.GetMorphism(grammar.Morphisms).Morph)
+        }
+        b1 := NewDnaString(curVariable.Value)
+        approxResults := IsApproximate(&b1, seqPart, 0, maxCost, 0, 0, maxDistance)
         nbApproxResults := len(approxResults)
         if nbApproxResults > 0 {
             for r:=0;r<nbApproxResults;r++ {
@@ -465,17 +469,44 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         _, smaxDist := curVariable.GetDistanceConstraint()
         maxDist, _ = utils.GetRangeValue(smaxDist, contextVars)
     }
+
+    searchHandler.SetAmbiguity(true)
+
     if maxDist > 0 {
         searchHandler.SetMax_indel(maxDist)
     }
     if maxCost > 0 {
         searchHandler.SetMax_subst(maxCost)
     }
-    searchHandler.SetAmbiguity(true)
 
     bioString := NewDnaString(curVariable.Value)
     if match.Reverse {
         curVariable.Value = bioString.Reverse()
+    }
+    // TODO set morphism support in cassiopee
+    if curVariable.HasMorphism() {
+        log.Printf("Use morphisms with cassie")
+        searchMorph := make(map[string]string)
+        morph := curVariable.GetMorphism(grammar.Morphisms)
+        json_msg, _ := json.Marshal(morph)
+        log.Printf("Morph content %s", json_msg)
+        smap := cassie.NewMapStringString()
+        for key, value := range morph.Morph {
+
+            svalue := ""
+            for _, sval := range value {
+                svalue += sval
+            }
+            searchMorph[key] = svalue
+
+            smap.Set(key, svalue)
+        }
+        //smap := cassie.NewMapStringString(searchMorph)
+        searchHandler.SetMorphisms(smap)
+
+    }else {
+        smap := cassie.NewMapStringString()
+        searchHandler.SetMorphisms(smap)
     }
 
     searchHandler.Search(curVariable.Value)
@@ -557,12 +588,12 @@ func isExact(m1 string, m2 string) (res bool){
     return res
 }
 
-func IsApproximate(m1 string, m2 string, cost int, maxCost int, in int, del int, maxIndel int) ([][4]int){
+func IsApproximate(m1 BioString, m2 string, cost int, maxCost int, in int, del int, maxIndel int) ([][4]int){
     indel := in + del
     log.Printf("Start IsApproximate cost: %d, in %d, del %d", cost, in, del)
-    m1Len := len(m1)
+    m1Len := len(m1.GetValue())
     m2Len := len(m2)
-    log.Printf("Part1:%d %s", m1Len, m1)
+    log.Printf("Part1:%d %s", m1Len, m1.GetValue())
     log.Printf("Part2:%d %s", m2Len, m2)
 
 
@@ -609,29 +640,35 @@ func IsApproximate(m1 string, m2 string, cost int, maxCost int, in int, del int,
         }
     }
 
-    log.Printf("Compare %s vs %s", m1[0], m2[0])
-    b1 := DnaString{}
-    b1.Value = m1[0:1]
-    b2 := DnaString{}
-    b2.Value = m2[0:1]
-    if ! IsBioExact(b1, b2.Value) {
-    //if m1[0] != m2[0] {
+    log.Printf("Compare %s vs %s", m1.GetValue()[0], m2[0])
+    m1Content := m1.GetValue()
+    m1.SetValue(m1.GetValue()[0:1])
+    //b1 := DnaString{}
+    //b1.Value = m1[0:1]
+    //b2 := DnaString{}
+    //b2.Value = m2[0:1]
+    if ! m1.IsExact(m2[0:1]) {
+    //if ! IsBioExact(m1, m2[0:1]) {
         log.Printf("Cost: %d <? %d", cost, maxCost)
         if cost < maxCost {
             log.Printf("Try with cost")
-            tmpRes := IsApproximate(m1[1:m1Len], m2[1:m2Len], cost + 1, maxCost, in, del, maxIndel)
+            m1.SetValue(m1Content[1:m1Len])
+            tmpRes := IsApproximate(m1, m2[1:m2Len], cost + 1, maxCost, in, del, maxIndel)
             results = append(results, tmpRes...)
         }
     } else {
         log.Printf("Equal, continue...")
-        tmpRes := IsApproximate(m1[1:m1Len], m2[1:m2Len], cost, maxCost, in, del, maxIndel)
+        m1.SetValue(m1Content[1:m1Len])
+        tmpRes := IsApproximate(m1, m2[1:m2Len], cost, maxCost, in, del, maxIndel)
         results = append(results, tmpRes...)
     }
     if indel < maxIndel {
         log.Printf("Try with indel")
-        tmpRes := IsApproximate(m1[0:m1Len], m2[1:m2Len], cost, maxCost, in + 1, del, maxIndel)
+        m1.SetValue(m1Content[0:m1Len])
+        tmpRes := IsApproximate(m1, m2[1:m2Len], cost, maxCost, in + 1, del, maxIndel)
         results = append(results, tmpRes...)
-        tmpRes = IsApproximate(m1[1:m1Len], m2[0:m2Len], cost, maxCost, in, del + 1, maxIndel)
+        m1.SetValue(m1Content[1:m1Len])
+        tmpRes = IsApproximate(m1, m2[0:m2Len], cost, maxCost, in, del + 1, maxIndel)
         results = append(results, tmpRes...)
     }
     log.Printf("End of comparison")
@@ -676,8 +713,12 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
         if match.Reverse {
             curVariable.Value = bioString.Reverse()
         }
+        if curVariable.HasMorphism() {
+            bioString.SetMorphisms(curVariable.GetMorphism(grammar.Morphisms).Morph)
+        }
         // seqPart := sequence[i:i+patternLen]
-        if isExact(curVariable.Value, seqPart) {
+        b1 := NewDnaString(curVariable.Value)
+        if IsBioExact(&b1, seqPart) {
             elts := [...]int{i, i+patternLen}
             findResults = append(findResults, elts)
         }
@@ -790,7 +831,7 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
             b1 := DnaString{}
             b1.Value = negConstraint.Value
             log.Printf("Has negative constraint, check %s against %s", seqPart, b1.Value)
-            if IsBioExact(b1, seqPart) {
+            if IsBioExact(&b1, seqPart) {
                 return newMatch, true
             }
         }

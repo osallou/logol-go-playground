@@ -10,6 +10,8 @@ in development
 
 rabbitmq and redis
 
+Needs cassiopee >= 1.0.9, org.irisa.genouest/cassiopee is built upon this version
+
 # running
 
 

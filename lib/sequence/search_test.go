@@ -10,35 +10,64 @@ import (
         "encoding/json"
 )
 
-func TestIsApproximate(t *testing.T){
+func TestGetMorphisms(t *testing.T){
+    grammarpath := filepath.Join("testdata", "grammar.txt")
+    g, _ := ioutil.ReadFile(grammarpath)
+    err, grammar := logol.LoadGrammar([]byte(g))
+    if err != nil {
+            log.Fatalf("error: %v", err)
+    }
+    variable := logol.Variable{}
+    variable.String_constraints.Morphism = "wc"
+    m := variable.GetMorphism(grammar.Morphisms)
+    json_msg, _ := json.Marshal(m)
+    //log.Printf("## %s", json_msg)
+    res, ok := m.Morph["a"]
+    if !ok {
+        t.Errorf("Invalid result %s", json_msg)
+    }
+    if res[0] != "t" {
+        t.Errorf("Invalid result %s", json_msg)
+    }
+}
 
-    res:= IsApproximate("acgt", "acgt", 0, 0, 0, 0, 0)
+func TestIsApproximate(t *testing.T){
+    ds := NewDnaString("acgt")
+    res:= IsApproximate(&ds, "acgt", 0, 0, 0, 0, 0)
     resLen := len(res)
     if resLen == 0 {
         t.Errorf("Invalid result")
     }
-    res= IsApproximate("acgt", "aggt", 0, 1, 0, 0, 0)
+    ds = NewDnaString("acgt")
+    res= IsApproximate(&ds, "aggt", 0, 1, 0, 0, 0)
     resLen = len(res)
     if resLen == 0 {
         t.Errorf("Invalid result")
     }
 
-    res= IsApproximate("acgt", "accgt", 0, 0, 0, 0, 1)
+    ds = NewDnaString("acgt")
+    res= IsApproximate(&ds, "accgt", 0, 0, 0, 0, 1)
     resLen = len(res)
     if resLen == 0 {
         t.Errorf("Invalid result")
     }
-    res= IsApproximate("acgt", "acgtttt", 0, 0, 0, 0, 1)
+
+    ds = NewDnaString("acgt")
+    res= IsApproximate(&ds, "acgtttt", 0, 0, 0, 0, 1)
     resLen = len(res)
     if resLen == 0 {
         t.Errorf("Invalid result")
     }
-    res= IsApproximate("acgt", "atttt", 0, 0, 0, 0, 1)
+
+    ds = NewDnaString("acgt")
+    res= IsApproximate(&ds, "atttt", 0, 0, 0, 0, 1)
     resLen = len(res)
     if resLen != 0 {
         t.Errorf("Invalid result")
     }
-    res= IsApproximate("acgt", "atctttt", 0, 1, 0, 0, 1)
+
+    ds = NewDnaString("acgt")
+    res= IsApproximate(&ds, "atctttt", 0, 1, 0, 0, 1)
     resLen = len(res)
     if resLen == 0 {
         t.Errorf("Invalid result")

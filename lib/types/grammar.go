@@ -176,3 +176,27 @@ func(lvar Variable) GetContentConstraint() (content string, isFixed bool, err bo
 func(lvar Variable) HasReverseConstraint() bool {
     return  lvar.String_constraints.Reverse
 }
+func(lvar Variable) HasMorphism() bool {
+    return  lvar.String_constraints.Morphism != ""
+}
+func(lvar Variable) GetMorphism(morphisms map[string]Morphism) Morphism {
+    morphName := lvar.String_constraints.Morphism
+    log.Printf("Get morphism variable %s", morphName)
+    morph, ok := morphisms[morphName]
+    if ! ok {
+        if morphName == "wc" {
+            morph = Morphism{}
+            morph.Morph = make(map[string][]string)
+            morph.Morph["a"] = make([]string, 1)
+            morph.Morph["a"][0] = "t"
+            morph.Morph["c"] = make([]string, 1)
+            morph.Morph["c"][0] = "g"
+            morph.Morph["g"] = make([]string, 1)
+            morph.Morph["g"][0] = "c"
+            morph.Morph["t"] = make([]string, 1)
+            morph.Morph["t"][0] = "a"
+
+        }
+    }
+    return morph
+}

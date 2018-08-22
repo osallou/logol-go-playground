@@ -1,0 +1,26 @@
+morphisms:
+  foo:
+    morph:
+      t:
+        - a
+      a:
+        - t
+models:
+
+  mod1:
+   comment: 'mod1(-R1)'
+   param:
+     - 'R1'
+   start:
+     - var1
+   vars:
+     var1:
+         value: 'tcga'
+         string_constraints:
+            morphism: foo
+         next: null
+
+run:
+ - model: mod1
+
+sequence: /home/osallou/Development/NOSAVE/gopath/src/org.irisa.genouest/logol/sequence.txt
