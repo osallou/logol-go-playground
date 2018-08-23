@@ -22,8 +22,14 @@ Needs cassiopee >= 1.0.9, org.irisa.genouest/cassiopee is built upon this versio
 
 # running
 
+rabbitmq and redis connection url are given via env variables:
 
-in cmd/logol[]/
+    LOGOL_REDIS_ADDR=localhost:6379
+    LOGOL_RABBITMQ_ADDR=amqp://guest:guest@localhost:5672
+
+
+in cmd/logol[XXX]:
+
 1 or more : logolMessage
 1: logolResult
 1: logolCassie
