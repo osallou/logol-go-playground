@@ -10,7 +10,7 @@ import (
   "time"
   "github.com/streadway/amqp"
   logol "org.irisa.genouest/logol/lib/types"
-  cassie "org.irisa.genouest/cassiopee"
+  cassie "github.com/osallou/cassiopee-go"
 )
 
 const STEP_NONE int = -1

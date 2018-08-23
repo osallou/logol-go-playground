@@ -2,7 +2,7 @@ package logol
 
 import (
     // "log"
-    cassie "org.irisa.genouest/cassiopee"
+    cassie "github.com/osallou/cassiopee-go"
 )
 
 type CassieSearchOptions struct{

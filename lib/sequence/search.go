@@ -8,7 +8,7 @@ import (
     "github.com/satori/go.uuid"
     //"strconv"
     logol "org.irisa.genouest/logol/lib/types"
-    cassie "org.irisa.genouest/cassiopee"
+    cassie "github.com/osallou/cassiopee-go"
     utils "org.irisa.genouest/logol/lib/utils"
 )
 
