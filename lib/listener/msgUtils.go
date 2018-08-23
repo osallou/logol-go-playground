@@ -6,7 +6,8 @@ package logol
 import (
     "encoding/json"
     "fmt"
-    "log"
+    //"log"
+    "os"
     "sort"
     "strings"
     logol "org.irisa.genouest/logol/lib/types"
@@ -17,9 +18,15 @@ import (
 )
 
 // Initialize a connection to redis
-func newRedisClient(host string) (client *redis.Client){
+func newRedisClient() (client *redis.Client){
+    redisAddr := "localhost:6379"
+    osRedisAddr := os.Getenv("LOGOL_REDIS_ADDR")
+    if osRedisAddr != "" {
+        redisAddr = osRedisAddr
+    }
+
 	redisClient := redis.NewClient(&redis.Options{
-		Addr:     host + ":6379",
+		Addr:     redisAddr,
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})
@@ -39,9 +46,9 @@ type msgManager struct {
     SearchUtils seq.SearchUtils
 }
 
-func NewMsgManager(host string, ch *amqp.Channel, chuid string) msgManager {
+func NewMsgManager(ch *amqp.Channel, chuid string) msgManager {
     manager := msgManager{}
-    manager.Client = newRedisClient(host)
+    manager.Client = newRedisClient()
     manager.Ch = ch
     manager.Chuid = chuid
     return manager
@@ -71,17 +78,17 @@ func (m msgManager) get(uid string) (result logol.Result, err error) {
 func (m msgManager) setParam(contextVars map[string]logol.Match, param []string) ([]logol.Match){
     var res []logol.Match
     for _, modelOutput := range param {
-        log.Printf("Set param %s", modelOutput)
+        logger.Debugf("Set param %s", modelOutput)
         cv, ok := contextVars[modelOutput]
         if ! ok {
             // DEBUG json print for debug
             json_vars, _ := json.Marshal(contextVars)
-            log.Printf("Param not in contextVars: %s", json_vars)
+            logger.Debugf("Param not in contextVars: %s", json_vars)
             m := logol.NewMatch()
             m.Id = modelOutput
             res = append(res, m)
         }else {
-            log.Printf("Param in contextVars")
+            logger.Debugf("Param in contextVars")
             res = append(res, cv)
         }
     }
@@ -94,7 +101,7 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
     // Send result to next components in grammar
     nextVars := m.Grammar.Models[model].Vars[modelVariable].Next
     if len(nextVars) == 0 {
-        log.Printf("No next var")
+        logger.Debugf("No next var")
         if len(data.From) > 0 {
             lastFrom := data.From[len(data.From) - 1]
             elts := strings.Split(lastFrom, ".")
@@ -103,11 +110,11 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
             data.From = data.From[:len(data.From) - 1]
             data.Step = STEP_POST
             data.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], m.Grammar.Models[model].Param)
-            log.Printf("Go back to calling model %s %s", backModel, backVariable)
+            logger.Debugf("Go back to calling model %s %s", backModel, backVariable)
             m.sendMessage(backModel, backVariable, data, false)
         }else {
             modelsToRun := len(m.Grammar.Run) - 1
-            log.Printf("Other main models? %d vs %d", data.RunIndex, modelsToRun)
+            logger.Debugf("Other main models? %d vs %d", data.RunIndex, modelsToRun)
             if data.RunIndex < modelsToRun {
                 // Run next main model
                 modelTo := m.Grammar.Run[data.RunIndex + 1].Model
@@ -117,7 +124,7 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                         m.Client.Incr("logol:" + data.Uid + ":count")
                     }
                     modelVariableTo := modelVariablesTo[i]
-                    log.Printf("Go to next main model %s:%s", modelTo, modelVariableTo)
+                    logger.Debugf("Go to next main model %s:%s", modelTo, modelVariableTo)
                     tmpResult := logol.NewResult()
                     tmpResult.Uid = data.Uid
                     //data.From = make([]string, 0)
@@ -137,15 +144,15 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                     for i, param := range modelParams {
                         p, ok := tmpContextVars[param]
                         if ! ok {
-                            log.Printf("Param %s not available adding empty one", param)
+                            logger.Debugf("Param %s not available adding empty one", param)
                             tmpResult.Param[i] = logol.NewMatch()
                         }else {
-                            log.Printf("Add param %s", param)
+                            logger.Debugf("Add param %s", param)
                             tmpResult.Param[i] = p
                         }
                     }
                     debug_json, _ := json.Marshal(tmpResult)
-                    log.Printf("Send to main model: %s", debug_json)
+                    logger.Debugf("Send to main model: %s", debug_json)
 
                     tmpResult.ContextVars = make([]map[string]logol.Match, 0)
                     tmpResult.RunIndex = data.RunIndex + 1
@@ -157,11 +164,11 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
             data.Iteration = 0
             data.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], m.Grammar.Models[model].Param)
             data_json, _ := json.Marshal(data)
-            log.Printf("Match:Over:SendResult: %s", data_json)
+            logger.Debugf("Match:Over:SendResult: %s", data_json)
             m.sendMessage("over", "over", data, true)
         }
     } else {
-        log.Printf("Go to next vars")
+        logger.Debugf("Go to next vars")
         data.Iteration = 0
         for _, nextVar := range nextVars {
             m.sendMessage(model, nextVar, data, false)
@@ -218,7 +225,7 @@ func (m msgManager) sendMessage(model string, modelVariable string, data logol.R
     // If over or final check step
     if over || data.Step == STEP_YETTOBEDEFINED {
         if len(data.YetToBeDefined) > 0 {
-            log.Printf("Some vars are still pending to be analysed, should check them now")
+            logger.Debugf("Some vars are still pending to be analysed, should check them now")
             data.Step = STEP_YETTOBEDEFINED
             publish_msg := m.prepareMessage(model, modelVariable, data)
             m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
@@ -233,7 +240,7 @@ func (m msgManager) sendMessage(model string, modelVariable string, data logol.R
         m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
 
     }
-    log.Printf("Sent message to %s.%s", model, modelVariable)
+    logger.Debugf("Sent message to %s.%s", model, modelVariable)
 
 }
 
@@ -265,7 +272,7 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
             m.Client.Incr("logol:" + tmpResult.Uid + ":count")
         }
         modelVariableTo := modelVariablesTo[i]
-        log.Printf("Call model %s:%s", callModel, modelVariableTo)
+        logger.Debugf("Call model %s:%s", callModel, modelVariableTo)
         m.sendMessage(callModel, modelVariableTo, tmpResult, false)
     }
 
@@ -274,12 +281,12 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
 func (m msgManager) handleYetToBeDefined(result logol.Result, model string, modelVariable string) {
     index := result.GetFirstMatchAnalysable()
     if index == -1 {
-        log.Printf("No variable in YetToBeDefined can be analysed, stopping here")
+        logger.Debugf("No variable in YetToBeDefined can be analysed, stopping here")
         m.Client.Incr("logol:" + result.Uid + ":ban")
         return
     }
     if index == -2 {
-        log.Printf("All yet to be defined done, sending result")
+        logger.Debugf("All yet to be defined done, sending result")
         publish_msg := m.prepareMessage("over", "over", result)
         m.publishMessage("logol-result-" + m.Chuid, publish_msg)
         return
@@ -329,7 +336,7 @@ func (m msgManager) handleMessage(result logol.Result) {
     modelVariable := result.ModelVariable
     // var newContextVars map[string]logol.Match
     newContextVars := make(map[string]logol.Match)
-    log.Printf("Received message for step %d", result.Step)
+    logger.Debugf("Received message for step %d", result.Step)
     if result.Step == STEP_YETTOBEDEFINED {
         m.handleYetToBeDefined(result, model, modelVariable)
         return
@@ -348,7 +355,7 @@ func (m msgManager) handleMessage(result logol.Result) {
                 for i, _ := range m.Grammar.Models[model].Param {
                     inputId :=  m.Grammar.Models[model].Param[i]
                     if i >= len(result.Param) {
-                        log.Printf("Param not defined")
+                        logger.Debugf("Param not defined")
                         match := logol.NewMatch()
                         match.Id = inputId
                         match.Model = model
@@ -366,7 +373,7 @@ func (m msgManager) handleMessage(result logol.Result) {
     contextVars := result.ContextVars[len(result.ContextVars) - 1]
 
     if result.Step == STEP_POST {
-        log.Printf("ModelCallback:%s:%s", model, modelVariable)
+        logger.Debugf("ModelCallback:%s:%s", model, modelVariable)
         prev_context := result.Context[len(result.Context) - 1]
         result.Context = result.Context[:len(result.Context) - 1]
         result.ContextVars = result.ContextVars[:len(result.ContextVars) - 1]
@@ -376,7 +383,7 @@ func (m msgManager) handleMessage(result logol.Result) {
                 if i < len(result.Param) {
                     contextVars[outputId] = result.Param[i]
                 }else {
-                    log.Printf("Param not defined %s", outputId)
+                    logger.Debugf("Param not defined %s", outputId)
                     match := logol.NewMatch()
                     match.Id = outputId
                     match.Model = model
@@ -391,7 +398,7 @@ func (m msgManager) handleMessage(result logol.Result) {
         match.Id = modelVariable
         match.Uid = m.getUid()
         match.IsModel = true
-        log.Printf("Create var from model matches")
+        logger.Debugf("Create var from model matches")
         // TODO check if some childs are YetToBeDefined, if yes, mark model with YetToBeDefined
         // Sets however what can be done and add subvars to match.YetToBeDefined
         for i, m := range result.Matches {
@@ -399,7 +406,7 @@ func (m msgManager) handleMessage(result logol.Result) {
                 match.Spacer = m.Spacer
                 match.MinPosition = m.MinPosition
             }
-            log.Printf("Compare %d <? %d", match.Start, m.Start)
+            logger.Debugf("Compare %d <? %d", match.Start, m.Start)
             if (match.Start == -1 || m.Start < match.Start) {
                 match.Start = m.Start
             }
@@ -415,7 +422,7 @@ func (m msgManager) handleMessage(result logol.Result) {
         }
         match, err := m.SearchUtils.PostControl(match, m.Grammar, contextVars)
         if ! err {
-            log.Printf("New model match pos: %d, %d", match.Start, match.End)
+            logger.Debugf("New model match pos: %d, %d", match.Start, match.End)
             match.Children = result.Matches
 
             result.Matches = prev_context
@@ -430,7 +437,7 @@ func (m msgManager) handleMessage(result logol.Result) {
 
 
             if result.Iteration < m.Grammar.Models[model].Vars[modelVariable].Model.RepeatMax {
-                log.Printf("Continue iteration for %s, %s", model, modelVariable)
+                logger.Debugf("Continue iteration for %s, %s", model, modelVariable)
                 m.Client.IncrBy("logol:" + result.Uid + ":count", 1)
                 m.call_model(model, modelVariable, result, result.ContextVars[len(result.ContextVars) - 1])
             }
@@ -443,7 +450,7 @@ func (m msgManager) handleMessage(result logol.Result) {
         match := logol.NewMatch()
         curVariable := m.Grammar.Models[model].Vars[modelVariable]
         if curVariable.Model.Name != "" {
-            log.Printf("Call a model")
+            logger.Debugf("Call a model")
             m.call_model(model, modelVariable, result, contextVars)
             return
         }
@@ -465,7 +472,7 @@ func (m msgManager) handleMessage(result logol.Result) {
             go m.SearchUtils.FindFuture(matchChannel, match, model, modelVariable)
         } else {
             if result.Step == STEP_CASSIE {
-                log.Printf("DEBUG in cassie")
+                logger.Debugf("DEBUG in cassie")
                 go m.SearchUtils.FindCassie(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer, m.CassieManager.Searcher)
                 result.Step = STEP_NONE
             } else {
@@ -491,10 +498,10 @@ func (m msgManager) handleMessage(result logol.Result) {
         //for _,match := range matches {
         for match := range matchChannel {
             // Fake match to indicate that match should be forwarded to cassie queue, doing nothing here
-            log.Printf("Got var %s", match.Id)
+            logger.Debugf("Got var %s", match.Id)
             if match.Id == "" {
                 toForward = true
-                log.Printf("Forward to cassie")
+                logger.Debugf("Forward to cassie")
                 continue
             }
             nbMatches += 1
@@ -508,9 +515,9 @@ func (m msgManager) handleMessage(result logol.Result) {
             result.Position = match.End
 
             json_msg, _ := json.Marshal(curVariable)
-            log.Printf("curVariable:%s", json_msg)
+            logger.Debugf("curVariable:%s", json_msg)
             json_match, _ := json.Marshal(match)
-            log.Printf("match:%s", json_match)
+            logger.Debugf("match:%s", json_match)
             if curVariable.String_constraints.SaveAs != "" {
                 //TODO
                 save_as := curVariable.String_constraints.SaveAs
@@ -520,7 +527,7 @@ func (m msgManager) handleMessage(result logol.Result) {
                 }
                 contextVars[save_as] = match
                 json_msg, _ = json.Marshal(contextVars)
-                log.Printf("SaveAs:%s", json_msg)
+                logger.Debugf("SaveAs:%s", json_msg)
                 match.SavedAs = save_as
             }
             if ! canFindMatch {
@@ -559,7 +566,7 @@ func (m msgManager) handleMessage(result logol.Result) {
 
     }
 
-    log.Printf("Done")
+    logger.Debugf("Done")
 }
 
 

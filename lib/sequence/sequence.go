@@ -2,14 +2,12 @@ package logol
 
 import (
     "fmt"
-    "log"
     //"io/ioutil"
     "os"
     "strconv"
     "strings"
     lru "github.com/hashicorp/golang-lru"
 )
-
 
 type Sequence struct {
     Path string
@@ -28,7 +26,7 @@ func NewSequence(path string) (seq Sequence){
     seq.Path = path
     file, err := os.Open(path)
     if err != nil {
-        log.Fatalf("%s: %s", "failed to open sequence", err)
+        logger.Errorf("%s: %s", "failed to open sequence", err)
         panic(fmt.Sprintf("%s: %s", "failed to open sequence", err))
     }
     defer file.Close()
@@ -39,7 +37,7 @@ func NewSequence(path string) (seq Sequence){
 
 // Initialize a LRU cache for sequence
 func NewSequenceLru(sequence Sequence) (seq SequenceLru){
-    log.Printf("Initialize sequence LRU")
+    logger.Debugf("Initialize sequence LRU")
     seq = SequenceLru{}
     seq.Sequence = sequence
     seq.Lru, _ = lru.New(10)
@@ -48,7 +46,7 @@ func NewSequenceLru(sequence Sequence) (seq SequenceLru){
 
 // Get content from sequence using LRU cache
 func (s SequenceLru) GetContent(start int, end int) (content string) {
-    log.Printf("Search in sequence %d:%d", start, end)
+    logger.Debugf("Search in sequence %d:%d", start, end)
     keys := s.Lru.Keys()
     sRange := ""
     sStart := 0

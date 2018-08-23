@@ -1,7 +1,7 @@
 package logol
 
 import (
-        "log"
+        //"log"
         "gopkg.in/yaml.v2"
 )
 
@@ -41,13 +41,13 @@ func CheckMatches(matches []Match) (bool) {
     end_pos := 0
     for _, m := range matches {
         if m.Start == -1 || m.End == -1 {
-            log.Printf("Humm, something wrong occured, a variable is still not defined %s.%s: %s", m.Model, m.Id, m.Uid)
+            logger.Errorf("Humm, something wrong occured, a variable is still not defined %s.%s: %s", m.Model, m.Id, m.Uid)
             return false
         }
         if ! m.Spacer {
             if m.Overlap {
                 if m.End < end_pos {
-                    log.Printf("position does not fit with overlap")
+                    logger.Errorf("position does not fit with overlap")
                     return false
                 }
             }
@@ -58,7 +58,7 @@ func CheckMatches(matches []Match) (bool) {
             if (m.Start >= end_pos) {
                 end_pos = m.End
             }else {
-                log.Printf("position does not fit with previous match end")
+                logger.Errorf("position does not fit with previous match end")
                 return false
             }
         }

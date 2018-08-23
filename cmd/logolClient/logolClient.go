@@ -3,7 +3,7 @@
 package main
 
 import (
-        "fmt"
+        //"fmt"
         "log"
         "encoding/json"
         "io/ioutil"
@@ -12,91 +12,40 @@ import (
         "strconv"
         "syscall"
         "time"
-        //"gopkg.in/yaml.v2"
         "github.com/streadway/amqp"
         msgHandler "org.irisa.genouest/logol/lib/listener"
         redis "github.com/go-redis/redis"
         "github.com/satori/go.uuid"
         logol "org.irisa.genouest/logol/lib/types"
+        logs "org.irisa.genouest/logol/lib/log"
 )
 
-const testgrammar = `
-morphisms:
-  - foo:
-    - a
-    - g
-models:
-  mod2:
-    comment: 'mod2(+R2)'
-    start: 'var1'
-    param:
-      - R2
-    vars:
-        var1:
-            value: null
-            string_constraints:
-                content: 'R2'
-            next: null
-
-
-  mod1:
-   comment: 'mod1(-R1)'
-   param:
-     - 'R1'
-   start: 'var1'
-   vars:
-     var1:
-         value: 'cc'
-         next:
-           - var2
-     var2:
-         value: 'aaa'
-         string_constraints:
-             saveas: 'R1'
-         next:
-          - var3
-          - var4
-     var3:
-         value: null
-         string_constraints:
-           content: 'R1'
-         next:
-           - var5
-     var4:
-         comments: 'mod2(+R1)'
-         value: null
-         model:
-             name: 'mod2'
-             param:
-               - R1
-         next:
-           - var5
-     var5:
-         value: 'cgt'
-         next: null
-
-run:
- - model: mod1
-   param:
-     - R8
- - model: mod2
-   param:
-     - R8
-
-sequence: sequence.txt
-`
+var logger = logs.GetLogger("logol.client")
 
 func main() {
+
+    redisAddr := "localhost:6379"
+    osRedisAddr := os.Getenv("LOGOL_REDIS_ADDR")
+    if osRedisAddr != "" {
+        redisAddr = osRedisAddr
+    }
+
+    rabbitConUrl := "amqp://guest:guest@localhost:5672"
+    osRabbitConUrl := os.Getenv("LOGOL_RABBITMQ_ADDR")
+    if osRabbitConUrl != "" {
+        rabbitConUrl = osRabbitConUrl
+    }
+
     redisClient := redis.NewClient(&redis.Options{
-        Addr:     "localhost:6379",
+        Addr:     redisAddr,
         Password: "", // no password set
         DB:       0,  // use default DB
     })
 
 
-    connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
-        "guest", "guest", "localhost", 5672)
-    conn, _ := amqp.Dial(connUrl)
+    //connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
+    //    "guest", "guest", "localhost", 5672)
+    conn, _ := amqp.Dial(rabbitConUrl)
     defer conn.Close()
     ch, _ := conn.Channel()
     _, _ = ch.QueueDeclare(
@@ -120,7 +69,9 @@ func main() {
     u1 := uuid.Must(uuid.NewV4())
 
     jobuid := uuid.Must(uuid.NewV4())
-    log.Printf("Launch job %s", jobuid.String())
+    //log.Printf("Launch job %s", jobuid.String())
+
+    logger.Infof("Launch job %s", jobuid.String())
 
     publish_msg := amqp.Publishing{}
     publish_msg.Body = []byte(u1.String())

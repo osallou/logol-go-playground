@@ -2,7 +2,7 @@ package logol
 
 import (
     "strings"
-    "log"
+    //"log"
     //logol "org.irisa.genouest/logol/lib/types"
 )
 
@@ -35,11 +35,9 @@ func (s DnaString) GetValue() string{
     return s.Value
 }
 func (s *DnaString) SetValue(str string){
-    log.Printf("Update biostring to %s", str)
     s.Value = str
 }
 func (s DnaString) getMorphism(ch chan string, part string, index int) {
-    log.Printf("GetMorphisms %s, %d", part, index)
     sLen := len(part)
     if index >= sLen {
         ch <- part
@@ -62,9 +60,8 @@ func (s DnaString) getMorphism(ch chan string, part string, index int) {
 
 // Get all possible conversions with defined morphism
 func (s DnaString) GetMorphisms(ch chan string) {
-    log.Printf("GetMorphisms")
     if s.AllowedMorphisms == nil {
-        log.Printf("No morhpisms defined")
+        logger.Debugf("No morphisms defined")
         ch <- s.Value
         close(ch)
         return
@@ -109,7 +106,7 @@ func (s DnaString) Reverse() (string){
 func (s DnaString) IsExact(s2 string) bool {
     chain1 := strings.ToLower(s.Value)
     chain2 := strings.ToLower(s2)
-    log.Printf("Bio isexact %s  %s",chain1, chain2)
+    logger.Debugf("Bio isexact %s  %s",chain1, chain2)
 
     s1Len := len(chain1)
     s2Len := len(chain2)
@@ -131,7 +128,7 @@ func (s DnaString) IsExact(s2 string) bool {
                 return false
             }
         } else {
-            log.Printf("##COMPARE %s vs %s", chain1[i], chain2[i])
+            logger.Debugf("##COMPARE %s vs %s", chain1[i], chain2[i])
             if chain1[i:i+1] == "n" || chain2Char == "n" {
                 continue
             } else if chain1[i] != chain2[i] {

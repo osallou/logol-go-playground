@@ -4,13 +4,16 @@ package logol
 import (
     "encoding/json"
     "fmt"
-    "log"
+    //"log"
     "github.com/satori/go.uuid"
     //"strconv"
     logol "org.irisa.genouest/logol/lib/types"
     cassie "github.com/osallou/cassiopee-go"
     utils "org.irisa.genouest/logol/lib/utils"
+    logs "org.irisa.genouest/logol/lib/log"
 )
+
+var logger = logs.GetLogger("logol.sequence")
 
 const MAX_MATCH_SIZE = 1000
 
@@ -23,7 +26,7 @@ type SearchUtils struct {
 func NewSearchUtils(sequencePath string) (su SearchUtils){
     su = SearchUtils{}
     s := NewSequence(sequencePath)
-    log.Printf("NewSearchUtils, seq size: %d", s.Size)
+    logger.Debugf("NewSearchUtils, seq size: %d", s.Size)
     su.SequenceHandler = NewSequenceLru(s)
     return su
 }
@@ -61,14 +64,14 @@ func (s SearchUtils) FindFuture(mch chan logol.Match, match logol.Match, model s
 // find matching element in array of matches and update ones matching uid
 func (s SearchUtils) UpdateByUid(match logol.Match, matches []logol.Match){
     json_m, _ := json.Marshal(match)
-    log.Printf("Update match now: %s", json_m)
+    logger.Debugf("Update match now: %s", json_m)
     if len(matches) == 0 {
         return
     }
-    log.Printf("Search uid %s in matches", match.Uid)
+    logger.Debugf("Search uid %s in matches", match.Uid)
     for i, m := range matches {
         if m.Uid == match.Uid {
-            log.Printf("Gotcha, found it")
+            logger.Debugf("Gotcha, found it")
             matches[i] = match
             break
         } else {
@@ -76,7 +79,7 @@ func (s SearchUtils) UpdateByUid(match logol.Match, matches []logol.Match){
         }
     }
     json_msg, _ := json.Marshal(matches)
-    log.Printf("UpdateByUid %s", json_msg)
+    logger.Debugf("UpdateByUid %s", json_msg)
 }
 
 // Find a variable that could not be found before (due to other constraints)
@@ -126,7 +129,7 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
     	}
     	return u
     }
-    log.Printf("Test if variable can be defined now")
+    logger.Debugf("Test if variable can be defined now")
     curVariable := grammar.Models[model].Vars[modelVariable]
     hasUndefined := false
     undefinedVars := make([]string, 0)
@@ -199,7 +202,7 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
             contentConstraint := undefinedVars[i]
             content, ok := contextVars[contentConstraint]
             if ! ok {
-                log.Printf("Depends on undefined variable %s", contentConstraint)
+                logger.Debugf("Depends on undefined variable %s", contentConstraint)
                 m := logol.NewMatch()
                 m.Uid = uuid.Must(uuid.NewV4()).String()
                 contextVars[contentConstraint] = m
@@ -208,7 +211,7 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
                 return false
             }
             if (content.Start == -1 || content.End == -1) {
-                log.Printf("Depends on non available variable %s", contentConstraint)
+                logger.Debugf("Depends on non available variable %s", contentConstraint)
                 match.YetToBeDefined = append(match.YetToBeDefined, content.Uid)
                 return false
             }
@@ -219,30 +222,6 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
         return true
     }
 
-    /*
-    if (curVariable.Value == "" &&
-        curVariable.String_constraints.Content != "") {
-        contentConstraint := curVariable.String_constraints.Content
-        content, ok := contextVars[contentConstraint]
-        if ! ok {
-            log.Printf("Depends on undefined variable %s", contentConstraint)
-            m := logol.NewMatch()
-            m.Uid = uuid.Must(uuid.NewV4()).String()
-            contextVars[contentConstraint] = m
-            match.YetToBeDefined = append(match.YetToBeDefined, m.Uid)
-            // fmt.Printf("YetToBeDefined: %v", match.YetToBeDefined)
-            return false
-        }
-        if (content.Start == -1 || content.End == -1) {
-            log.Printf("Depends on non available variable %s", contentConstraint)
-            match.YetToBeDefined = append(match.YetToBeDefined, content.Uid)
-            return false
-        }
-    }
-
-
-    return true
-    */
 }
 
 
@@ -289,20 +268,20 @@ func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match log
                 return
             }
         } else {
-            log.Printf("Skipping start constraint for the moment as overlap is allowed")
+            logger.Debugf("Skipping start constraint for the moment as overlap is allowed")
         }
     }
 
     if curVariable.HasSizeConstraint() && ! curVariable.HasContentConstraint(){
-        log.Printf("Size constraint but no content constraint, take any chars")
+        logger.Debugf("Size constraint but no content constraint, take any chars")
         min, err := utils.GetRangeValue(curVariable.String_constraints.Size.Min, contextVars)
         if err {
-            log.Printf("Could not interpret constraint, skipping it: %s", curVariable.String_constraints.Size.Min)
+            logger.Debugf("Could not interpret constraint, skipping it: %s", curVariable.String_constraints.Size.Min)
             min = 1
         }
         max, err := utils.GetRangeValue(curVariable.String_constraints.Size.Max, contextVars)
         if err {
-            log.Printf("Could not interpret constraint, skipping it: %s", curVariable.String_constraints.Size.Max)
+            logger.Debugf("Could not interpret constraint, skipping it: %s", curVariable.String_constraints.Size.Max)
             max = MAX_MATCH_SIZE
         }
         //min, _ := strconv.Atoi(curVariable.String_constraints.Size.Min)
@@ -345,9 +324,9 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
     if (curVariable.Value == "" &&
         curVariable.String_constraints.Content != "") {
         contentConstraint := curVariable.String_constraints.Content
-        log.Printf("FindExact, get var content %s", contentConstraint)
+        logger.Debugf("FindExact, get var content %s", contentConstraint)
         curVariable.Value = s.SequenceHandler.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
-        log.Printf("? %s",curVariable.Value)
+        logger.Debugf("? %s",curVariable.Value)
         if curVariable.Value == "" {
             close(mch)
             return
@@ -364,7 +343,7 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
         maxStart = seqLen - patternLen + 1
     }
 
-    log.Printf("seach between %d and %d", minStart, maxStart)
+    logger.Debugf("seach between %d and %d", minStart, maxStart)
     for i:=minStart; i < maxStart; i++ {
         seqPart := s.SequenceHandler.GetContent(i, i + patternLen + 1+ maxDistance)
 
@@ -412,13 +391,13 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
         endResult := findResult[1]
         if ! spacer {
             if startResult != match.MinPosition {
-                log.Printf("skip match at wrong position: %d" , startResult)
+                logger.Debugf("skip match at wrong position: %d" , startResult)
                 ban += 1
                 continue
             }
         } else {
             if startResult < match.MinPosition {
-                log.Printf("skip match at wrong position: %d" , startResult)
+                logger.Debugf("skip match at wrong position: %d" , startResult)
                 ban += 1
                 continue
             }
@@ -435,17 +414,17 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
         if ! err {
             mch <- newMatch
             // matches = append(matches, newMatch)
-            log.Printf("got match: %d, %d", newMatch.Start, newMatch.End)
+            logger.Debugf("got match: %d, %d", newMatch.Start, newMatch.End)
         }
     }
-    log.Printf("got matches: %d", (len(findResults) - ban))
+    logger.Debugf("got matches: %d", (len(findResults) - ban))
 
     close(mch)
 }
 
 // Find a variable in sequence using external library cassiopee
 func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, searchHandler cassie.CassieSearch) {
-    log.Printf("Search in Cassie")
+    logger.Debugf("Search in Cassie")
     // json_msg, _ := json.Marshal(contextVars)
     // seq := Sequence{grammar.Sequence, 0, ""}
     curVariable := grammar.Models[model].Vars[modelVariable]
@@ -485,11 +464,11 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
     }
     // TODO set morphism support in cassiopee
     if curVariable.HasMorphism() {
-        log.Printf("Use morphisms with cassie")
+        logger.Debugf("Use morphisms with cassie")
         searchMorph := make(map[string]string)
         morph := curVariable.GetMorphism(grammar.Morphisms)
-        json_msg, _ := json.Marshal(morph)
-        log.Printf("Morph content %s", json_msg)
+        //json_msg, _ := json.Marshal(morph)
+        //log.Printf("Morph content %s", json_msg)
         smap := cassie.NewMapStringString()
         for key, value := range morph.Morph {
 
@@ -520,7 +499,7 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
     msize := smatches.Size()
     var i int64
     i = 0
-    log.Printf("Cassie found %d solutions", msize)
+    logger.Debugf("Cassie found %d solutions", msize)
     for i < msize {
         elem := smatches.Get(int(i))
         newMatch := logol.NewMatch()
@@ -535,9 +514,9 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         }
         newMatch.End = int(elem.GetPos()) + pLen
         newMatch.Info = curVariable.Value
-        log.Printf("Cassie found %d:%d:%d:%d", newMatch.Start, newMatch.End, newMatch.Sub, newMatch.Indel)
+        logger.Debugf("Cassie found %d:%d:%d:%d", newMatch.Start, newMatch.End, newMatch.Sub, newMatch.Indel)
         if newMatch.Start < match.MinPosition {
-            log.Printf("skip match at wrong position: %d" , newMatch.Start)
+            logger.Debugf("skip match at wrong position: %d" , newMatch.Start)
             continue
         }
         newMatch, err := s.PostControl(newMatch, grammar, contextVars)
@@ -551,18 +530,18 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
 }
 
 func (s SearchUtils) FindAny(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, minSize int, maxSize int, contextVars map[string]logol.Match, spacer bool) {
-    log.Printf("Search any string at min pos %d, spacer: %t", match.MinPosition, spacer)
+    logger.Debugf("Search any string at min pos %d, spacer: %t", match.MinPosition, spacer)
     seqLen := s.SequenceHandler.Sequence.Size
     //sequence := seq.GetSequence()
     //seqLen := len(sequence)
-    log.Printf("Extract string of size %d -> %d", minSize, maxSize)
+    logger.Debugf("Extract string of size %d -> %d", minSize, maxSize)
     for l:=minSize;l<=maxSize;l ++ {
         patternLen := l
         maxSearchIndex := match.MinPosition + 1
         if spacer {
             maxSearchIndex = seqLen - patternLen
         }
-        log.Printf("Loop over %d:%d", match.MinPosition , maxSearchIndex)
+        logger.Debugf("Loop over %d:%d", match.MinPosition , maxSearchIndex)
         for i:=match.MinPosition; i < maxSearchIndex; i++ {
             // seqPart := s.SequenceHandler.GetContent(i, i + patternLen)
             newMatch := logol.NewMatch()
@@ -575,7 +554,7 @@ func (s SearchUtils) FindAny(mch chan logol.Match, grammar logol.Grammar, match 
             if ! err {
                 mch <- newMatch
                 // matches = append(matches, newMatch)
-                log.Printf("got match: %d, %d", newMatch.Start, newMatch.End)
+                logger.Debugf("got match: %d, %d", newMatch.Start, newMatch.End)
             }
         }
     }
@@ -590,23 +569,23 @@ func isExact(m1 string, m2 string) (res bool){
 
 func IsApproximate(m1 BioString, m2 string, cost int, maxCost int, in int, del int, maxIndel int) ([][4]int){
     indel := in + del
-    log.Printf("Start IsApproximate cost: %d, in %d, del %d", cost, in, del)
+    logger.Debugf("Start IsApproximate cost: %d, in %d, del %d", cost, in, del)
     m1Len := len(m1.GetValue())
     m2Len := len(m2)
-    log.Printf("Part1:%d %s", m1Len, m1.GetValue())
-    log.Printf("Part2:%d %s", m2Len, m2)
+    logger.Debugf("Part1:%d %s", m1Len, m1.GetValue())
+    logger.Debugf("Part2:%d %s", m2Len, m2)
 
 
     results := make([][4]int, 0)
     if m1Len == 0 && m2Len == 0 {
-        log.Printf("End of comparison, Match! %d;%d;%d", cost,  in, del)
+        logger.Debugf("End of comparison, Match! %d;%d;%d", cost,  in, del)
         results = append(results, [4]int{m1Len, cost, in, del})
         return results
         //return true, cost, indel
     }
     if m1Len == 0 && m2Len != 0 {
         if indel >= maxIndel {
-            log.Printf("End of comparison, Match! %d;%d;%d", cost,  in, del)
+            logger.Debugf("End of comparison, Match! %d;%d;%d", cost,  in, del)
             results = append(results, [4]int{m1Len, cost, in, del})
             return results
         }
@@ -616,7 +595,7 @@ func IsApproximate(m1 BioString, m2 string, cost int, maxCost int, in int, del i
         }
 
         for i:=0;i<allowedIndels;i++ {
-            log.Printf("End of comparison, Match! %d;%d;%d", cost,  in + i, del)
+            logger.Debugf("End of comparison, Match! %d;%d;%d", cost,  in + i, del)
             results = append(results, [4]int{m1Len, cost, in + i, del})
         }
         return results
@@ -625,22 +604,22 @@ func IsApproximate(m1 BioString, m2 string, cost int, maxCost int, in int, del i
     }
     if m1Len != 0 && m2Len == 0 {
         if indel >= maxIndel {
-            log.Printf("End of comparison")
+            logger.Debugf("End of comparison")
             return results
         }
         if maxIndel - indel < m1Len {
-            log.Printf("End of comparison")
+            logger.Debugf("End of comparison")
             return results
             //return true, cost, maxIndel
         }else {
-            log.Printf("End of comparison, Match! %d;%d;%d", cost, in, del + m1Len)
+            logger.Debugf("End of comparison, Match! %d;%d;%d", cost, in, del + m1Len)
             results = append(results, [4]int{m1Len, cost, in, del + m1Len})
             return results
             //return true, cost, indel + m1Len
         }
     }
 
-    log.Printf("Compare %s vs %s", m1.GetValue()[0], m2[0])
+    logger.Debugf("Compare %s vs %s", m1.GetValue()[0], m2[0])
     m1Content := m1.GetValue()
     m1.SetValue(m1.GetValue()[0:1])
     //b1 := DnaString{}
@@ -649,21 +628,21 @@ func IsApproximate(m1 BioString, m2 string, cost int, maxCost int, in int, del i
     //b2.Value = m2[0:1]
     if ! m1.IsExact(m2[0:1]) {
     //if ! IsBioExact(m1, m2[0:1]) {
-        log.Printf("Cost: %d <? %d", cost, maxCost)
+        logger.Debugf("Cost: %d <? %d", cost, maxCost)
         if cost < maxCost {
-            log.Printf("Try with cost")
+            logger.Debugf("Try with cost")
             m1.SetValue(m1Content[1:m1Len])
             tmpRes := IsApproximate(m1, m2[1:m2Len], cost + 1, maxCost, in, del, maxIndel)
             results = append(results, tmpRes...)
         }
     } else {
-        log.Printf("Equal, continue...")
+        logger.Debugf("Equal, continue...")
         m1.SetValue(m1Content[1:m1Len])
         tmpRes := IsApproximate(m1, m2[1:m2Len], cost, maxCost, in, del, maxIndel)
         results = append(results, tmpRes...)
     }
     if indel < maxIndel {
-        log.Printf("Try with indel")
+        logger.Debugf("Try with indel")
         m1.SetValue(m1Content[0:m1Len])
         tmpRes := IsApproximate(m1, m2[1:m2Len], cost, maxCost, in + 1, del, maxIndel)
         results = append(results, tmpRes...)
@@ -671,7 +650,7 @@ func IsApproximate(m1 BioString, m2 string, cost int, maxCost int, in int, del i
         tmpRes = IsApproximate(m1, m2[0:m2Len], cost, maxCost, in, del + 1, maxIndel)
         results = append(results, tmpRes...)
     }
-    log.Printf("End of comparison")
+    logger.Debugf("End of comparison")
     return results
 
 }
@@ -684,16 +663,16 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
     if (curVariable.Value == "" &&
         curVariable.String_constraints.Content != "") {
         contentConstraint := curVariable.String_constraints.Content
-        log.Printf("FindExact, get var content %s", contentConstraint)
+        logger.Debugf("FindExact, get var content %s", contentConstraint)
         curVariable.Value = s.SequenceHandler.GetContent(contextVars[contentConstraint].Start, contextVars[contentConstraint].End)
-        log.Printf("? %s",curVariable.Value)
+        logger.Debugf("? %s",curVariable.Value)
         if curVariable.Value == "" {
             close(mch)
             return
         }
     }
 
-    log.Printf("Search %s at min pos %d, spacer: %t", curVariable.Value, match.MinPosition, spacer)
+    logger.Debugf("Search %s at min pos %d, spacer: %t", curVariable.Value, match.MinPosition, spacer)
 
     findResults := make([][2]int, 0)
     seqLen := s.SequenceHandler.Sequence.Size
@@ -730,13 +709,13 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
         endResult := findResult[1]
         if ! spacer {
             if startResult != match.MinPosition {
-                log.Printf("skip match at wrong position: %d" , startResult)
+                logger.Debugf("skip match at wrong position: %d" , startResult)
                 ban += 1
                 continue
             }
         } else {
             if startResult < match.MinPosition {
-                log.Printf("skip match at wrong position: %d" , startResult)
+                logger.Debugf("skip match at wrong position: %d" , startResult)
                 ban += 1
                 continue
             }
@@ -751,10 +730,10 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
         if ! err {
             mch <- newMatch
             // matches = append(matches, newMatch)
-            log.Printf("got match: %d, %d", newMatch.Start, newMatch.End)
+            logger.Debugf("got match: %d, %d", newMatch.Start, newMatch.End)
         }
     }
-    log.Printf("got matches: %d", (len(findResults) - ban))
+    logger.Debugf("got matches: %d", (len(findResults) - ban))
     close(mch)
     //return matches
 }
@@ -765,11 +744,11 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
     // check model global constraints
     // Check for negative_constraints
     newMatch = match
-    log.Printf("PostControl checks")
+    logger.Debugf("PostControl checks")
 
     curVariable := grammar.Models[match.Model].Vars[match.Id]
     if curVariable.HasStartConstraint(){
-        log.Printf("Control start")
+        logger.Debugf("Control start")
         minS, maxS := curVariable.GetStartConstraint()
         min, _ := utils.GetRangeValue(minS, contextVars)
         max, _ := utils.GetRangeValue(maxS, contextVars)
@@ -778,7 +757,7 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
         }
     }
     if curVariable.HasEndConstraint(){
-        log.Printf("Control end")
+        logger.Debugf("Control end")
         minS, maxS := curVariable.GetEndConstraint()
         min, _ := utils.GetRangeValue(minS, contextVars)
         max, _ := utils.GetRangeValue(maxS, contextVars)
@@ -788,7 +767,7 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
     }
 
     if curVariable.HasCostConstraint(){
-        log.Printf("Control cost")
+        logger.Debugf("Control cost")
         minS, maxS := curVariable.GetCostConstraint()
         min, _ := utils.GetRangeValue(minS, contextVars)
         max, _ := utils.GetRangeValue(maxS, contextVars)
@@ -798,7 +777,7 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
     }
 
     if curVariable.HasDistanceConstraint(){
-        log.Printf("Control distance")
+        logger.Debugf("Control distance")
         minS, maxS := curVariable.GetDistanceConstraint()
         min, _ := utils.GetRangeValue(minS, contextVars)
         max, _ := utils.GetRangeValue(maxS, contextVars)
@@ -810,7 +789,7 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
     seqPart := s.SequenceHandler.GetContent(match.Start, match.End)
 
     if curVariable.HasPercentConstraint(){
-        log.Printf("Control percent of alphabet")
+        logger.Debugf("Control percent of alphabet")
         alphabet, percent, _ := curVariable.GetPercentConstraint()
         doMatch, _ := utils.CheckAlphabetPercent(seqPart, alphabet, percent)
         if ! doMatch {
@@ -820,7 +799,7 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
 
 
 
-    log.Printf("Check negative constraints")
+    logger.Debugf("Check negative constraints")
     negConstraints := curVariable.Negative_constraints
     if len(negConstraints) > 0 {
         for _, negConstraint := range negConstraints {
@@ -830,7 +809,7 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
             }
             b1 := DnaString{}
             b1.Value = negConstraint.Value
-            log.Printf("Has negative constraint, check %s against %s", seqPart, b1.Value)
+            logger.Debugf("Has negative constraint, check %s against %s", seqPart, b1.Value)
             if IsBioExact(&b1, seqPart) {
                 return newMatch, true
             }

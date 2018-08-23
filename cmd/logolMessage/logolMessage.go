@@ -3,9 +3,10 @@
 package main
 
 import (
-        "fmt"
+        //"fmt"
         //"log"
         //"gopkg.in/yaml.v2"
+        "os"
         "github.com/streadway/amqp"
         //logol "org.irisa.genouest/logol/lib/types"
         msgHandler "org.irisa.genouest/logol/lib/listener"
@@ -13,9 +14,16 @@ import (
 
 
 func main() {
-    connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
-        "guest", "guest", "localhost", 5672)
-    conn, _ := amqp.Dial(connUrl)
+
+    rabbitConUrl := "amqp://guest:guest@localhost:5672"
+    osRabbitConUrl := os.Getenv("LOGOL_RABBITMQ_ADDR")
+    if osRabbitConUrl != "" {
+        rabbitConUrl = osRabbitConUrl
+    }
+
+    //connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
+    //    "guest", "guest", "localhost", 5672)
+    conn, _ := amqp.Dial(rabbitConUrl)
     ch, _ := conn.Channel()
     _, _ = ch.QueueDeclare(
       "logol-analyse-test", // name

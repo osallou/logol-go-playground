@@ -5,8 +5,10 @@ import (
         "strings"
         "strconv"
         "log"
+        logs "org.irisa.genouest/logol/lib/log"
 )
 
+var logger = logs.GetLogger("logol.types")
 
 type Morphism struct {
     Morph map[string][]string

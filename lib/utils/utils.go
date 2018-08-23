@@ -1,11 +1,14 @@
 package logol
 
 import (
-    "log"
+    //"log"
     "strconv"
     "strings"
     logol "org.irisa.genouest/logol/lib/types"
+    logs "org.irisa.genouest/logol/lib/log"
 )
+
+var logger = logs.GetLogger("logol.sequence.utils")
 
 const OPERATION_PLUS = 0
 const OPERATION_MINUS = 1
@@ -22,7 +25,7 @@ const PROP_CONTENT = 4
 func getPropertyValueFromContext(property int, variable string, contextVars map[string]logol.Match) (res int, err bool) {
     ctxVar, ok := contextVars[variable]
     if ! ok {
-        log.Printf("Could not find %s in context vars", variable)
+        logger.Debugf("Could not find %s in context vars", variable)
         return 0, true
     }
     switch property {
@@ -126,7 +129,7 @@ func GetRangeValue(expr string, contextVars map[string]logol.Match) (val int, er
     if expr == "_" {
         return -1, false
     }
-    log.Printf("Check range and extract values if possible")
+    logger.Debugf("Check range and extract values if possible")
     elts := strings.Split(expr, " ")
     if len(elts) == 1 {
         val, err := getValueFromExpression(elts[0], contextVars)
@@ -137,13 +140,13 @@ func GetRangeValue(expr string, contextVars map[string]logol.Match) (val int, er
 
     } else {
         if len(elts) != 3 {
-            log.Printf("Invalid operation %s", expr)
+            logger.Debugf("Invalid operation %s", expr)
             return 0, true
         }
         val1, err1 := getValueFromExpression(elts[0], contextVars)
         val2, err2 := getValueFromExpression(elts[2], contextVars)
         if err1 || err2 {
-            log.Printf("Invalid operation %s", expr)
+            logger.Debugf("Invalid operation %s", expr)
             return 0, true
         }
         switch elts[1] {
@@ -169,7 +172,7 @@ func CheckAlphabetPercent(seqPart string, alphabet string, percent int) (bool, i
         }
     }
     percentMatch := nbMatch * 100 / seqPartLen
-    log.Printf("Percent match: %d vs %d", percentMatch, percent)
+    logger.Debugf("Percent match: %d vs %d", percentMatch, percent)
     if percentMatch >= percent {
         return true, percentMatch
     }

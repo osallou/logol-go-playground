@@ -11,7 +11,10 @@ import (
   "github.com/streadway/amqp"
   logol "org.irisa.genouest/logol/lib/types"
   cassie "github.com/osallou/cassiopee-go"
+  logs "org.irisa.genouest/logol/lib/log"
 )
+
+var logger = logs.GetLogger("logol.listener")
 
 const STEP_NONE int = -1
 const STEP_PRE int = 0
@@ -57,9 +60,14 @@ func NewMsgHandler(host string, port int, user string, password string) MsgHandl
 }
 
 func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
-    connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
-        h.User, h.Password, h.Hostname, h.Port)
-    conn, err := amqp.Dial(connUrl)
+    rabbitConUrl := "amqp://guest:guest@localhost:5672"
+    osRabbitConUrl := os.Getenv("LOGOL_RABBITMQ_ADDR")
+    if osRabbitConUrl != "" {
+        rabbitConUrl = osRabbitConUrl
+    }
+    //connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
+    //    h.User, h.Password, h.Hostname, h.Port)
+    conn, err := amqp.Dial(rabbitConUrl)
     failOnError(err, "Failed to connect to RabbitMQ")
     defer conn.Close()
 
@@ -140,7 +148,7 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
     )
     failOnError(err, "Failed to register a consumer")
 
-    msgManager := NewMsgManager("localhost", ch, "test")
+    msgManager := NewMsgManager(ch, "test")
 
     grammars := make(map[string]logol.Grammar)
 
@@ -160,17 +168,17 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
         for d := range msgs {
             result, err := msgManager.get(string(d.Body[:]))
             if err != nil {
-                log.Printf("Failed to get message")
+                logger.Errorf("Failed to get message")
                 d.Ack(false)
                 continue
             }
             // Get grammar
             g, ok := grammars[result.Uid]
             if ! ok {
-                log.Printf("Load grammar not in cache, loading %s", result.Uid)
+                logger.Debugf("Load grammar not in cache, loading %s", result.Uid)
                 grammar, err := msgManager.Client.Get("logol:" + result.Uid + ":grammar").Result()
                 if grammar == "" {
-                    log.Printf("Failed to get grammar %s", result.Uid)
+                    logger.Errorf("Failed to get grammar %s", result.Uid)
                     msgManager.Client.Incr("logol:" + result.Uid + ":ban")
                     d.Ack(false)
                     continue
@@ -182,7 +190,7 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
                 msgManager.Grammar = g
                 grammars[result.Uid] = g
             }else {
-                log.Printf("Load grammar from cache %s", result.Uid)
+                logger.Debugf("Load grammar from cache %s", result.Uid)
                 msgManager.Grammar = g
             }
 
@@ -204,7 +212,7 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
                 //cassieIndexer.Graph()
                 indexerLoaded = true
             }
-            log.Printf("Load cassie searcher")
+            logger.Debugf("Load cassie searcher")
             cassieSearcher := cassie.NewCassieSearch(cassieIndexer)
             cassieSearcher.SetMode(0)
             cassieSearcher.SetMax_subst(0)
@@ -213,14 +221,14 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
             msgManager.CassieManager = logol.Cassie{cassieIndexer, cassieSearcher,0}
 
 
-            log.Printf("Received message: %s", result.MsgTo)
+            logger.Debugf("Received message: %s", result.MsgTo)
             // TODO to remove, for debug only
             json_msg, _ := json.Marshal(result)
-            log.Printf("#DEBUG# %s", json_msg)
+            logger.Debugf("#DEBUG# %s", json_msg)
             now := time.Now()
             start_time := now.UnixNano()
             now = time.Now()
-            log.Printf("Received:Model:%s:Variable:%s", result.Model, result.ModelVariable)
+            logger.Debugf("Received:Model:%s:Variable:%s", result.Model, result.ModelVariable)
             msgManager.handleMessage(result)
             end_time := now.UnixNano()
             duration := end_time - start_time
@@ -238,12 +246,12 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
 
     go func(ch chan bool) {
       for d := range events {
-        log.Printf("Received an event: %s", d.Body)
+        logger.Debugf("Received an event: %s", d.Body)
         msgEvent := MsgEvent{}
         json.Unmarshal([]byte(d.Body), &msgEvent)
         switch msgEvent.Step {
             case STEP_END:
-                log.Printf("Received exit request")
+                logger.Infof("Received exit request")
                 d.Ack(false)
                 //os.Exit(0)
                 wg.Done()
@@ -255,16 +263,21 @@ func (h MsgHandler) Cassie(queueName string, fn MsgCallback) {
     }(forever)
 
 
-    log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+    logger.Infof(" [*] Waiting for messages. To exit press CTRL+C")
     <-forever
     ch.Close()
     wg.Wait()
 }
 
 func (h MsgHandler) Results(rch chan [][]logol.Match, queueName string, fn MsgCallback) {
-    connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
-        h.User, h.Password, h.Hostname, h.Port)
-    conn, err := amqp.Dial(connUrl)
+    rabbitConUrl := "amqp://guest:guest@localhost:5672"
+    osRabbitConUrl := os.Getenv("LOGOL_RABBITMQ_ADDR")
+    if osRabbitConUrl != "" {
+        rabbitConUrl = osRabbitConUrl
+    }
+    //connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
+    //    h.User, h.Password, h.Hostname, h.Port)
+    conn, err := amqp.Dial(rabbitConUrl)
     failOnError(err, "Failed to connect to RabbitMQ")
     defer conn.Close()
 
@@ -348,7 +361,7 @@ func (h MsgHandler) Results(rch chan [][]logol.Match, queueName string, fn MsgCa
     forever := make(chan bool)
 
 
-    msgManager := NewMsgManager("localhost", ch, "test")
+    msgManager := NewMsgManager(ch, "test")
 
     nbMatches := 0
     maxMatches := 100
@@ -356,7 +369,7 @@ func (h MsgHandler) Results(rch chan [][]logol.Match, queueName string, fn MsgCa
     if os_maxMatches != ""{
         maxMatches, err = strconv.Atoi(os_maxMatches)
         if err != nil {
-            log.Printf("Invalid env variable LOGOL_MAX_MATCH, using default [100]")
+            logger.Errorf("Invalid env variable LOGOL_MAX_MATCH, using default [100]")
             maxMatches = 100
         }
     }
@@ -370,17 +383,17 @@ func (h MsgHandler) Results(rch chan [][]logol.Match, queueName string, fn MsgCa
         defer file.Close()
 
         for d := range msgs {
-            log.Printf("Received a message: %s", string(d.Body[:]))
+            logger.Debugf("Received a message: %s", string(d.Body[:]))
             result, err := msgManager.get(string(d.Body[:]))
 
             json_msg, _ := json.Marshal(result)
-            log.Printf("Res: %s", json_msg)
+            logger.Debugf("Res: %s", json_msg)
             if err != nil {
-                log.Printf("Failed to get message")
+                logger.Errorf("Failed to get message")
                 d.Ack(false)
                 continue
             }
-            log.Printf("Match for job %s", result.Uid)
+            logger.Debugf("Match for job %s", result.Uid)
             matchOk := logol.CheckMatches(result.Matches)
             if ! matchOk {
                 msgManager.Client.Incr("logol:" + result.Uid + ":ban")
@@ -394,9 +407,9 @@ func (h MsgHandler) Results(rch chan [][]logol.Match, queueName string, fn MsgCa
                 matches, _ := json.Marshal(allMatches)
                 fmt.Fprintln(file, "", string(matches))
                 rch <- allMatches
-                log.Printf("%s", matches)
+                logger.Debugf("%s", matches)
             }else {
-                log.Printf("Max results reached [%d], waiting to end...", maxMatches)
+                logger.Infof("Max results reached [%d], waiting to end...", maxMatches)
                 msgManager.Client.Incr("logol:" + result.Uid + ":ban")
             }
             d.Ack(false)
@@ -406,12 +419,12 @@ func (h MsgHandler) Results(rch chan [][]logol.Match, queueName string, fn MsgCa
 
     go func(ch chan bool) {
       for d := range events {
-        log.Printf("Received an event: %s", d.Body)
+        logger.Debugf("Received an event: %s", d.Body)
         msgEvent := MsgEvent{}
         json.Unmarshal([]byte(d.Body), &msgEvent)
         switch msgEvent.Step {
             case STEP_END:
-                log.Printf("Received exit request")
+                logger.Infof("Received exit request")
                 //close(rch)
                 wg.Done()
                 d.Ack(false)
@@ -425,7 +438,7 @@ func (h MsgHandler) Results(rch chan [][]logol.Match, queueName string, fn MsgCa
     }(forever)
 
 
-    log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+    logger.Infof(" [*] Waiting for messages. To exit press CTRL+C")
     <-forever
     ch.Close()
     wg.Wait()
@@ -434,9 +447,14 @@ func (h MsgHandler) Results(rch chan [][]logol.Match, queueName string, fn MsgCa
 
 
 func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
-    connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
-        h.User, h.Password, h.Hostname, h.Port)
-    conn, err := amqp.Dial(connUrl)
+    rabbitConUrl := "amqp://guest:guest@localhost:5672"
+    osRabbitConUrl := os.Getenv("LOGOL_RABBITMQ_ADDR")
+    if osRabbitConUrl != "" {
+        rabbitConUrl = osRabbitConUrl
+    }
+    //connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
+    //    h.User, h.Password, h.Hostname, h.Port)
+    conn, err := amqp.Dial(rabbitConUrl)
     failOnError(err, "Failed to connect to RabbitMQ")
     defer conn.Close()
 
@@ -532,7 +550,7 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
 
     ban := false
 
-    msgManager := NewMsgManager("localhost", ch, "test")
+    msgManager := NewMsgManager(ch, "test")
 
     grammars := make(map[string]logol.Grammar)
 
@@ -550,7 +568,7 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
     go func() {
       searchUtilsLoaded := false
       for d := range msgs {
-        log.Printf("Received a message: %s", string(d.Body[:]))
+        logger.Debugf("Received a message: %s", string(d.Body[:]))
         if ban {
             d.Ack(false)
             continue
@@ -559,17 +577,17 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
 
             result, err := msgManager.get(string(d.Body[:]))
             if err != nil {
-                log.Printf("Failed to get message")
+                logger.Errorf("Failed to get message")
                 d.Ack(false)
                 continue
             }
             // Get grammar
             g, ok := grammars[result.Uid]
             if ! ok {
-                log.Printf("Load grammar not in cache, loading %s", result.Uid)
+                logger.Debugf("Load grammar not in cache, loading %s", result.Uid)
                 grammar, err := msgManager.Client.Get("logol:" + result.Uid + ":grammar").Result()
                 if grammar == "" {
-                    log.Printf("Failed to get grammar %s", result.Uid)
+                    logger.Errorf("Failed to get grammar %s", result.Uid)
                     msgManager.Client.Incr("logol:" + result.Uid + ":ban")
                     d.Ack(false)
                     continue
@@ -581,26 +599,24 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
                 msgManager.Grammar = g
                 grammars[result.Uid] = g
             }else {
-                log.Printf("Load grammar from cache %s", result.Uid)
+                logger.Debugf("Load grammar from cache %s", result.Uid)
                 msgManager.Grammar = g
             }
 
             if ! searchUtilsLoaded {
-                //log.Printf("Init sequence lru")
                 msgManager.SearchUtils = msgManager.SetSearchUtils(msgManager.Grammar.Sequence)
                 searchUtilsLoaded = true
             }
-            log.Printf("##### %d", msgManager.SearchUtils.SequenceHandler.Sequence.Size)
 
 
-            log.Printf("Received message: %s", result.MsgTo)
+            logger.Debugf("Received message: %s", result.MsgTo)
             // TODO to remove, for debug only
             json_msg, _ := json.Marshal(result)
-            log.Printf("#DEBUG# %s", json_msg)
+            logger.Debugf("#DEBUG# %s", json_msg)
             now := time.Now()
             start_time := now.UnixNano()
             now = time.Now()
-            log.Printf("Received:Model:%s:Variable:%s", result.Model, result.ModelVariable)
+            logger.Debugf("Received:Model:%s:Variable:%s", result.Model, result.ModelVariable)
             msgManager.handleMessage(result)
             end_time := now.UnixNano()
             duration := end_time - start_time
@@ -615,12 +631,12 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
 
     go func(ch chan bool) {
       for d := range events {
-        log.Printf("Received an event: %s", d.Body)
+        logger.Debugf("Received an event: %s", d.Body)
         msgEvent := MsgEvent{}
         json.Unmarshal([]byte(d.Body), &msgEvent)
         switch msgEvent.Step {
             case STEP_END:
-                log.Printf("Received exit request")
+                logger.Infof("Received exit request")
                 d.Ack(false)
                 ch <- true
                 wg.Done()
@@ -635,7 +651,7 @@ func (h MsgHandler) Listen(queueName string, fn MsgCallback) {
     }(forever)
 
 
-    log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+    logger.Infof(" [*] Waiting for messages. To exit press CTRL+C")
     <-forever
 
     ch.Close()
