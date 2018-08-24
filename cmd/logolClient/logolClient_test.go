@@ -41,7 +41,7 @@ func startGrammar(resChan chan [][]logol.Match, grammarFile string) ([][] logol.
     t.SetCount(data.Uid, 1)
     t.SetBan(data.Uid, 0)
     t.SetMatch(data.Uid, 0)
-    t.SetGrammar(grammarFile, data.Uid)
+    t.SetGrammar(grammar, data.Uid)
 
     go func() {
         log.Printf("Start cassie manager")

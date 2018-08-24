@@ -9,18 +9,24 @@ import (
     "strings"
     lru "github.com/hashicorp/golang-lru"
     cassie "github.com/osallou/cassiopee-go"
+    logol "org.irisa.genouest/logol/lib/types"
 )
 
 var once sync.Once
 
 var CassieIndexerInstance *cassie.CassieIndexer
 
-func GetCassieIndexer(sequencePath string) (*cassie.CassieIndexer) {
+func GetCassieIndexer(grammar logol.Grammar) (*cassie.CassieIndexer) {
         once.Do(func(){
-            instance := cassie.NewCassieIndexer(sequencePath)
-            instance.SetMax_index_depth(1000)
-            instance.SetMax_depth(10000)
+            instance := cassie.NewCassieIndexer(grammar.Sequence)
+            if grammar.Options != nil {
+                instance.SetMax_index_depth(grammar.Options["MAX_PATTERN_LENGTH"])
+            }else {
+                instance.SetMax_index_depth(1000)
+            }
+            //instance.SetMax_depth(0)
             instance.SetDo_reduction(true)
+            logger.Infof("Indexing sequence %s", grammar.Sequence)
             instance.Index()
             CassieIndexerInstance = &instance
         })

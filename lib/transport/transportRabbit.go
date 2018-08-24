@@ -3,7 +3,7 @@ package logol
 import (
     "encoding/json"
     "fmt"
-    "io/ioutil"
+    //"io/ioutil"
     "os"
     "strconv"
     "sync"
@@ -60,9 +60,10 @@ func(t *TransportRabbit) Clear(uid string) {
     t.redis.Del("logol:" + uid + ":grammar")
 }
 
-func(t *TransportRabbit) SetGrammar(grammarFile string, grammarId string) (err bool){
-    logger.Infof("Set grammar %s, %s", grammarFile, grammarId)
-    grammar, _ := ioutil.ReadFile(grammarFile)
+func(t *TransportRabbit) SetGrammar(grammar []byte, grammarId string) (err bool){
+    //logger.Infof("Set grammar %s, %s", grammarFile, grammarId)
+    logger.Infof("Set grammar %s", grammarId)
+    //grammar, _ := ioutil.ReadFile(grammarFile)
     t.redis.Set("logol:" + grammarId + ":grammar", grammar, 0)
     return true
 }
@@ -205,7 +206,7 @@ func(s *TransportRabbit) Listen(queueListen QueueType, fn CallbackMessage) {
         panic(fmt.Sprintf("%s", "Failed to find message queue name"))
         //Errorf("Failed to find message queue %d", int(queueListen))
     }
-    logger.Errorf("Listen on queue %s", queueListenName)
+    logger.Infof("Listen on queue %s", queueListenName)
     eventQueueName, eok := s.queues[QUEUE_EVENT]
     if ! eok {
         panic(fmt.Sprintf("%s", "Failed to find event queue name"))

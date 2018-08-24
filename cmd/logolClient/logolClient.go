@@ -15,16 +15,24 @@ import (
         //"github.com/streadway/amqp"
         //msgHandler "org.irisa.genouest/logol/lib/listener"
         //redis "github.com/go-redis/redis"
+        "gopkg.in/yaml.v2"
         "github.com/satori/go.uuid"
         logol "org.irisa.genouest/logol/lib/types"
         transport "org.irisa.genouest/logol/lib/transport"
         // msg "org.irisa.genouest/logol/lib/message"
         logs "org.irisa.genouest/logol/lib/log"
+        "github.com/namsral/flag"
 )
 
 var logger = logs.GetLogger("logol.client")
 
 func main() {
+    var maxpatternlen int64
+    flag.Int64Var(&maxpatternlen, "maxpatternlen", 1000, "Maximum size of patterns to search")
+    flag.Parse()
+    logger.Infof("option maxpatternlen: %d", maxpatternlen)
+
+
     uid := "test"
     os_uid := os.Getenv("LOGOL_UID")
     if os_uid != "" {
@@ -40,6 +48,12 @@ func main() {
     if err != nil {
             log.Fatalf("error: %v", err)
     }
+
+    if g.Options == nil {
+        g.Options = make(map[string]int64)
+    }
+    g.Options["MAX_PATTERN_LENGTH"] = maxpatternlen
+    updatedGrammar, _ := yaml.Marshal(&g)
 
 
     modelTo := g.Run[0].Model
@@ -57,7 +71,7 @@ func main() {
     t.SetCount(data.Uid, 1)
     t.SetBan(data.Uid, 0)
     t.SetMatch(data.Uid, 0)
-    t.SetGrammar(grammarFile, data.Uid)
+    t.SetGrammar(updatedGrammar, data.Uid)
 
     for i := 0; i < len(modelVariablesTo); i++ {
         modelVariableTo := modelVariablesTo[i]

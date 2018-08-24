@@ -449,7 +449,7 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         maxDist, _ = utils.GetRangeValue(smaxDist, contextVars)
     }
 
-    indexer := GetCassieIndexer(grammar.Sequence)
+    indexer := GetCassieIndexer(grammar)
     searchHandler := cassie.NewCassieSearch(*indexer)
 
 

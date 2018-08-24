@@ -75,6 +75,7 @@ type MainModel struct {
 }
 
 type Grammar struct {
+    Options map[string]int64
     Morphisms map[string]Morphism
     Models map[string]Model
     Run []MainModel

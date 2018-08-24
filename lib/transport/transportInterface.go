@@ -121,5 +121,5 @@ type Transport interface {
     SendEvent(event MsgEvent) bool
     Listen(queueListen QueueType, fn CallbackMessage)
     GetGrammar(grammarId string) (g logol.Grammar, err bool)
-    SetGrammar(grammarFile string, grammarId string) (err bool)
+    SetGrammar(grammar []byte, grammarId string) (err bool)
 }
