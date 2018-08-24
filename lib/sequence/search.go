@@ -451,7 +451,9 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
 
     indexer := GetCassieIndexer(grammar)
     searchHandler := cassie.NewCassieSearch(*indexer)
-
+    if grammar.Options != nil {
+        searchHandler.SetMode(int(grammar.Options["MODE"]))
+    }
 
     searchHandler.SetAmbiguity(true)
 

@@ -10,7 +10,7 @@ import (
     "time"
     logs "org.irisa.genouest/logol/lib/log"
     logol "org.irisa.genouest/logol/lib/types"
-    cassie "github.com/osallou/cassiopee-go"
+    // cassie "github.com/osallou/cassiopee-go"
     seq "org.irisa.genouest/logol/lib/sequence"
     transport "org.irisa.genouest/logol/lib/transport"
     //redis "github.com/go-redis/redis"
@@ -211,8 +211,8 @@ func (m *MessageAnalyse) HandleMessage(result logol.Result) (ok bool) {
 
 
 type MessageCassie struct {
-    cassieIndexer cassie.CassieIndexer
-    indexerLoaded bool
+    //cassieIndexer cassie.CassieIndexer
+    //indexerLoaded bool
     searchUtilsLoaded bool
     grammars map[string]logol.Grammar
     msg msgManager
@@ -232,7 +232,7 @@ func (m *MessageCassie) Listen(queueListen transport.QueueType, fn transport.Cal
 func (m *MessageCassie) Init(uid string, rch chan [][]logol.Match) {
     logger.Infof("Init cassie %s", uid)
     m.msgLoaded = false
-    m.indexerLoaded = false
+    //m.indexerLoaded = false
     m.searchUtilsLoaded = false
     m.grammars = make(map[string]logol.Grammar)
     m.uid = uid

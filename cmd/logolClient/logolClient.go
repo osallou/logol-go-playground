@@ -28,10 +28,12 @@ var logger = logs.GetLogger("logol.client")
 
 func main() {
     var maxpatternlen int64
+    var mode int64
     flag.Int64Var(&maxpatternlen, "maxpatternlen", 1000, "Maximum size of patterns to search")
+    flag.Int64Var(&mode, "mode", 0, "Mode: 0=DNA, 1=RNA, 2=Protei")
     flag.Parse()
     logger.Infof("option maxpatternlen: %d", maxpatternlen)
-
+    logger.Infof("option mode: %d", mode)
 
     uid := "test"
     os_uid := os.Getenv("LOGOL_UID")
@@ -53,6 +55,7 @@ func main() {
         g.Options = make(map[string]int64)
     }
     g.Options["MAX_PATTERN_LENGTH"] = maxpatternlen
+    g.Options["MODE"] = mode
     updatedGrammar, _ := yaml.Marshal(&g)
 
 
