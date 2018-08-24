@@ -5,74 +5,33 @@ package logol
 
 import (
     "encoding/json"
-    "fmt"
     //"log"
-    "os"
     "sort"
     "strings"
     logol "org.irisa.genouest/logol/lib/types"
     seq "org.irisa.genouest/logol/lib/sequence"
-    redis "github.com/go-redis/redis"
-    "github.com/streadway/amqp"
+    transport "org.irisa.genouest/logol/lib/transport"
+    //redis "github.com/go-redis/redis"
+    //"github.com/streadway/amqp"
     "github.com/satori/go.uuid"
 )
 
-// Initialize a connection to redis
-func newRedisClient() (client *redis.Client){
-    redisAddr := "localhost:6379"
-    osRedisAddr := os.Getenv("LOGOL_REDIS_ADDR")
-    if osRedisAddr != "" {
-        redisAddr = osRedisAddr
-    }
 
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     redisAddr,
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	})
-
-	pong, err := redisClient.Ping().Result()
-	fmt.Println(pong, err)
-	return redisClient
-}
 
 // Structure managing global access to different tools and information
 type msgManager struct {
-    Client *redis.Client
-    Ch *amqp.Channel
     Chuid string
     Grammar logol.Grammar
-    CassieManager logol.Cassie
     SearchUtils seq.SearchUtils
+    Transport transport.Transport
 }
 
-func NewMsgManager(ch *amqp.Channel, chuid string) msgManager {
+func NewMsgManager(uid string, t transport.Transport) msgManager {
     manager := msgManager{}
-    manager.Client = newRedisClient()
-    manager.Ch = ch
-    manager.Chuid = chuid
+    manager.Chuid = uid
+    manager.Transport = t
     return manager
 }
-
-func (m msgManager) SetSearchUtils(sequencePath string) (seq.SearchUtils){
-    //m.SearchUtils = seq.NewSearchUtils(sequencePath)
-    return seq.NewSearchUtils(sequencePath)
-}
-
-// Get from redis message value from input uid
-func (m msgManager) get(uid string) (result logol.Result, err error) {
-    // fetch from redis the message based on provided uid
-    // Once fetched, delete it from db
-    val, err := m.Client.Get(uid).Result()
-    if err == redis.Nil {
-        return logol.Result{}, err
-    }
-    result = logol.Result{}
-    json.Unmarshal([]byte(val), &result)
-    m.Client.Del(uid)
-    return result, err
-}
-
 
 // check for input/output params of model, and set them with current context variables
 func (m msgManager) setParam(contextVars map[string]logol.Match, param []string) ([]logol.Match){
@@ -108,7 +67,7 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
             backModel := elts[0]
             backVariable := elts[1]
             data.From = data.From[:len(data.From) - 1]
-            data.Step = STEP_POST
+            data.Step = transport.STEP_POST
             data.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], m.Grammar.Models[model].Param)
             logger.Debugf("Go back to calling model %s %s", backModel, backVariable)
             m.sendMessage(backModel, backVariable, data, false)
@@ -121,7 +80,8 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                 modelVariablesTo := m.Grammar.Models[modelTo].Start
                 for i := 0; i < len(modelVariablesTo); i++ {
                     if i > 0 {
-                        m.Client.Incr("logol:" + data.Uid + ":count")
+                        //m.Client.Incr("logol:" + data.Uid + ":count")
+                        m.Transport.AddCount(data.Uid, 1)
                     }
                     modelVariableTo := modelVariablesTo[i]
                     logger.Debugf("Go to next main model %s:%s", modelTo, modelVariableTo)
@@ -177,16 +137,9 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
 }
 
 // Send message to rabbitmq
-func (m msgManager) publishMessage(queue string, msg amqp.Publishing){
-    m.Ch.Publish(
-        "", // exchange
-        queue, // key
-        false, // mandatory
-        false, // immediate
-        msg,
-    )
+func (m msgManager) publishMessage(queue string, msg string){
+    m.Transport.PublishMessage(queue, msg)
 }
-
 
 // Get a unique identifier
 func (m msgManager) getUid() (string) {
@@ -198,23 +151,15 @@ func (m msgManager) getUid() (string) {
 // Prepare message before sending it to rabbitmq
 //
 // Give a unique id to message, store result in redis and send uid to rabbitmq
-func (m msgManager) prepareMessage(model string, modelVariable string, data logol.Result) (publish_msg amqp.Publishing){
-    u1 := uuid.Must(uuid.NewV4())
+func (m msgManager) prepareMessage(model string, modelVariable string, data logol.Result) (publish_msg string){
     sort.Slice(data.Matches, func(i, j int) bool {
         return data.Matches[i].Start < data.Matches[j].Start
     })
-    publish_msg = amqp.Publishing{}
-    publish_msg.Body = []byte(u1.String())
-
     data.MsgTo = "logol-" + model + "-" + modelVariable
     data.Model = model
     data.ModelVariable = modelVariable
 
-    json_msg, _ := json.Marshal(data)
-    err := m.Client.Set(u1.String(), json_msg, 0).Err()
-    if err != nil{
-        failOnError(err, "Failed to store message")
-    }
+    publish_msg = m.Transport.PrepareMessage(data)
     return publish_msg
 }
 
@@ -223,10 +168,10 @@ func (m msgManager) prepareMessage(model string, modelVariable string, data logo
 // if some components are not yet defined, then try to define them now and go to result at least
 func (m msgManager) sendMessage(model string, modelVariable string, data logol.Result, over bool) {
     // If over or final check step
-    if over || data.Step == STEP_YETTOBEDEFINED {
+    if over || data.Step == transport.STEP_YETTOBEDEFINED {
         if len(data.YetToBeDefined) > 0 {
             logger.Debugf("Some vars are still pending to be analysed, should check them now")
-            data.Step = STEP_YETTOBEDEFINED
+            data.Step = transport.STEP_YETTOBEDEFINED
             publish_msg := m.prepareMessage(model, modelVariable, data)
             m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
             return
@@ -246,12 +191,11 @@ func (m msgManager) sendMessage(model string, modelVariable string, data logol.R
 
 
 func (m msgManager) call_model(model string, modelVariable string, data logol.Result, contextVars map[string]logol.Match) {
-    // TODO
     curVariable := m.Grammar.Models[model].Vars[modelVariable]
     callModel := curVariable.Model.Name
     tmpResult := logol.NewResult()
     tmpResult.Uid = data.Uid
-    tmpResult.Step = STEP_PRE
+    tmpResult.Step = transport.STEP_PRE
     tmpResult.Iteration = data.Iteration + 1
     tmpResult.From = data.From
     data.From = make([]string, 0)
@@ -269,7 +213,8 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
     modelVariablesTo := m.Grammar.Models[callModel].Start
     for i := 0; i < len(modelVariablesTo); i++ {
         if i > 0 {
-            m.Client.Incr("logol:" + tmpResult.Uid + ":count")
+            m.Transport.AddCount(tmpResult.Uid, 1)
+            //m.Client.Incr("logol:" + tmpResult.Uid + ":count")
         }
         modelVariableTo := modelVariablesTo[i]
         logger.Debugf("Call model %s:%s", callModel, modelVariableTo)
@@ -282,7 +227,8 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
     index := result.GetFirstMatchAnalysable()
     if index == -1 {
         logger.Debugf("No variable in YetToBeDefined can be analysed, stopping here")
-        m.Client.Incr("logol:" + result.Uid + ":ban")
+        m.Transport.AddBan(result.Uid, 1)
+        //m.Client.Incr("logol:" + result.Uid + ":ban")
         return
     }
     if index == -2 {
@@ -310,7 +256,7 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
     if isModel {
         go m.SearchUtils.FixModel(matchChannel, matchToAnalyse)
     } else {
-        go m.SearchUtils.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches, m.CassieManager.Searcher)
+        go m.SearchUtils.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches)
     }
     result.YetToBeDefined = append(result.YetToBeDefined[:index], result.YetToBeDefined[index+1:]...)
     for match := range matchChannel {
@@ -322,11 +268,13 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
     }
 
     if nbMatches == 0 {
-        m.Client.Incr("logol:" + result.Uid + ":ban")
+        //m.Client.Incr("logol:" + result.Uid + ":ban")
+        m.Transport.AddBan(result.Uid, 1)
         return
     }
     incCount := nbMatches - 1
-    m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
+    //m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
+    m.Transport.AddCount(result.Uid, int64(incCount))
 }
 
 
@@ -337,12 +285,12 @@ func (m msgManager) handleMessage(result logol.Result) {
     // var newContextVars map[string]logol.Match
     newContextVars := make(map[string]logol.Match)
     logger.Debugf("Received message for step %d", result.Step)
-    if result.Step == STEP_YETTOBEDEFINED {
+    if result.Step == transport.STEP_YETTOBEDEFINED {
         m.handleYetToBeDefined(result, model, modelVariable)
         return
     }
 
-    if result.Step != STEP_CASSIE {
+    if result.Step != transport.STEP_CASSIE {
         isStartModel := false
         for _, start := range m.Grammar.Models[model].Start {
             if modelVariable == start {
@@ -372,7 +320,7 @@ func (m msgManager) handleMessage(result logol.Result) {
 
     contextVars := result.ContextVars[len(result.ContextVars) - 1]
 
-    if result.Step == STEP_POST {
+    if result.Step == transport.STEP_POST {
         logger.Debugf("ModelCallback:%s:%s", model, modelVariable)
         prev_context := result.Context[len(result.Context) - 1]
         result.Context = result.Context[:len(result.Context) - 1]
@@ -428,7 +376,7 @@ func (m msgManager) handleMessage(result logol.Result) {
             result.Matches = prev_context
 
             result.Matches = append(result.Matches, match)
-            result.Step = STEP_NONE
+            result.Step = transport.STEP_NONE
             result.Position = match.End
             result.Spacer = false
             if len(match.YetToBeDefined) > 0 {
@@ -438,12 +386,14 @@ func (m msgManager) handleMessage(result logol.Result) {
 
             if result.Iteration < m.Grammar.Models[model].Vars[modelVariable].Model.RepeatMax {
                 logger.Debugf("Continue iteration for %s, %s", model, modelVariable)
-                m.Client.IncrBy("logol:" + result.Uid + ":count", 1)
+                m.Transport.AddCount(result.Uid, 1)
+                //m.Client.IncrBy("logol:" + result.Uid + ":count", 1)
                 m.call_model(model, modelVariable, result, result.ContextVars[len(result.ContextVars) - 1])
             }
             m.go_next(model, modelVariable, result)
         } else {
-            m.Client.Incr("logol:" + result.Uid + ":ban")
+            m.Transport.AddBan(result.Uid, 1)
+            //m.Client.Incr("logol:" + result.Uid + ":ban")
         }
 
     } else {
@@ -471,10 +421,10 @@ func (m msgManager) handleMessage(result logol.Result) {
             // should check and update later on
             go m.SearchUtils.FindFuture(matchChannel, match, model, modelVariable)
         } else {
-            if result.Step == STEP_CASSIE {
+            if result.Step == transport.STEP_CASSIE {
                 logger.Debugf("DEBUG in cassie")
-                go m.SearchUtils.FindCassie(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer, m.CassieManager.Searcher)
-                result.Step = STEP_NONE
+                go m.SearchUtils.FindCassie(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
+                result.Step = transport.STEP_NONE
             } else {
                 go m.SearchUtils.Find(matchChannel, m.Grammar, match, model, modelVariable, contextVars, result.Spacer)
             }
@@ -547,21 +497,24 @@ func (m msgManager) handleMessage(result logol.Result) {
             m.go_next(model, modelVariable, result)
         }
         if toForward {
-            result.Step = STEP_CASSIE
+            result.Step = transport.STEP_CASSIE
             publish_msg := m.prepareMessage(model, modelVariable, result)
             m.publishMessage("logol-cassie-" + m.Chuid, publish_msg)
             return
         }
         if nbMatches == 0 {
-            m.Client.Incr("logol:" + result.Uid + ":ban")
+            m.Transport.AddBan(result.Uid, 1)
+            //m.Client.Incr("logol:" + result.Uid + ":ban")
             return
         }
         if nbNext > 0 {
             incCount := (nbNext * nbMatches) - 1
-            m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
+            //m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
+            m.Transport.AddCount(result.Uid, int64(incCount))
         }else {
             incCount := nbMatches - 1
-            m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
+            //m.Client.IncrBy("logol:" + result.Uid + ":count", int64(incCount))
+            m.Transport.AddCount(result.Uid, int64(incCount))
         }
 
     }

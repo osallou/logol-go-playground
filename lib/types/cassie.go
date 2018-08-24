@@ -22,6 +22,7 @@ func NewCassieManager() Cassie {
     return Cassie{}
 }
 
+
 /*
 func (c Cassie) GetIndexer(sequence string) {
     c.Indexer = cassie.NewCassieIndexer(sequence)

@@ -4,10 +4,28 @@ import (
     "fmt"
     //"io/ioutil"
     "os"
+    "sync"
     "strconv"
     "strings"
     lru "github.com/hashicorp/golang-lru"
+    cassie "github.com/osallou/cassiopee-go"
 )
+
+var once sync.Once
+
+var CassieIndexerInstance *cassie.CassieIndexer
+
+func GetCassieIndexer(sequencePath string) (*cassie.CassieIndexer) {
+        once.Do(func(){
+            instance := cassie.NewCassieIndexer(sequencePath)
+            instance.SetMax_index_depth(1000)
+            instance.SetMax_depth(10000)
+            instance.SetDo_reduction(true)
+            instance.Index()
+            CassieIndexerInstance = &instance
+        })
+        return CassieIndexerInstance
+}
 
 type Sequence struct {
     Path string

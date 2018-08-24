@@ -83,7 +83,7 @@ func (s SearchUtils) UpdateByUid(match logol.Match, matches []logol.Match){
 }
 
 // Find a variable that could not be found before (due to other constraints)
-func (s SearchUtils) FindToBeAnalysed(mch chan logol.Match, grammar logol.Grammar, match logol.Match, matches[]logol.Match, searchHandler cassie.CassieSearch) {
+func (s SearchUtils) FindToBeAnalysed(mch chan logol.Match, grammar logol.Grammar, match logol.Match, matches[]logol.Match) {
     contextVars := make(map[string]logol.Match)
     for _, uid := range match.YetToBeDefined {
         for _, m := range matches {
@@ -95,7 +95,7 @@ func (s SearchUtils) FindToBeAnalysed(mch chan logol.Match, grammar logol.Gramma
         }
     }
     if match.Spacer {
-        s.FindCassie(mch, grammar, match, match.Model, match.Id, contextVars, match.Spacer, searchHandler)
+        s.FindCassie(mch, grammar, match, match.Model, match.Id, contextVars, match.Spacer)
     } else {
         s.Find(mch, grammar, match, match.Model, match.Id, contextVars, match.Spacer)
     }
@@ -423,7 +423,7 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
 }
 
 // Find a variable in sequence using external library cassiopee
-func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool, searchHandler cassie.CassieSearch) {
+func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) {
     logger.Debugf("Search in Cassie")
     // json_msg, _ := json.Marshal(contextVars)
     // seq := Sequence{grammar.Sequence, 0, ""}
@@ -448,6 +448,10 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         _, smaxDist := curVariable.GetDistanceConstraint()
         maxDist, _ = utils.GetRangeValue(smaxDist, contextVars)
     }
+
+    indexer := GetCassieIndexer(grammar.Sequence)
+    searchHandler := cassie.NewCassieSearch(*indexer)
+
 
     searchHandler.SetAmbiguity(true)
 
@@ -526,6 +530,7 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         // log.Printf("DEBUG matches:%d %d %d", i, newMatch.Start, newMatch.End)
         i++
     }
+    cassie.DeleteCassieSearch(searchHandler)
     close(mch)
 }
 

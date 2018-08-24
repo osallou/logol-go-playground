@@ -4,98 +4,73 @@ package main
 
 import (
         "path/filepath"
-        "fmt"
+        //"fmt"
         "log"
         "encoding/json"
         "io/ioutil"
         "testing"
-        //"gopkg.in/yaml.v2"
-        "github.com/streadway/amqp"
-        msgHandler "org.irisa.genouest/logol/lib/listener"
-        redis "github.com/go-redis/redis"
+        message "org.irisa.genouest/logol/lib/message"
+        transport "org.irisa.genouest/logol/lib/transport"
         "github.com/satori/go.uuid"
         logol "org.irisa.genouest/logol/lib/types"
 )
 
-
-
-func stop(ch *amqp.Channel) {
-    publish_msg := amqp.Publishing{}
-    msg := logol.Event{}
-    msg.Step = msgHandler.STEP_END
-    exit_msg, _ := json.Marshal(msg)
-    publish_msg.Body = []byte(exit_msg)
-    ch.Publish(
-        "logol-event-exchange-test", // exchange
-        "", // key
-        false, // mandatory
-        false, // immediate
-        publish_msg,
-    )
+func stop(t transport.Transport) {
+    event := transport.MsgEvent{}
+    event.Step = transport.STEP_END
+    t.SendEvent(event)
 }
 
+
 func startGrammar(resChan chan [][]logol.Match, grammarFile string) ([][] logol.Match){
-    redisClient := redis.NewClient(&redis.Options{
-        Addr:     "localhost:6379",
-        Password: "", // no password set
-        DB:       0,  // use default DB
-    })
-
-
-    connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
-        "guest", "guest", "localhost", 5672)
-    conn, _ := amqp.Dial(connUrl)
-    defer conn.Close()
-    ch, _ := conn.Channel()
-    _, _ = ch.QueueDeclare(
-      "logol-analyse-test", // name
-      false,   // durable
-      false,   // delete when usused
-      false,   // exclusive
-      false,   // no-wait
-      nil,     // arguments
-    )
-
-    ch.ExchangeDeclare(
-      "logol-event-exchange-test", // name
-      "fanout",  // kind
-      false,   // durable
-      false,   // delete when usused
-      false,   // exclusive
-      false,   // no-wait
-      nil,     // arguments
-    )
-
-    u1 := uuid.Must(uuid.NewV4())
-
-    jobuid := uuid.Must(uuid.NewV4())
-    log.Printf("Launch job %s", jobuid.String())
-
-    publish_msg := amqp.Publishing{}
-    publish_msg.Body = []byte(u1.String())
-
-    data := logol.NewResult()
-    data.Uid = jobuid.String()
-
+    //uid := "test"
+    uid := uuid.Must(uuid.NewV4()).String()
     grammar, _ := ioutil.ReadFile(grammarFile)
     err, g := logol.LoadGrammar([]byte(grammar))
     if err != nil {
             log.Fatalf("error: %v", err)
     }
+    var t transport.Transport
+    t = transport.NewTransportRabbit()
+    t.Init(uid)
+
+    data := logol.NewResult()
+    jobuid := uuid.Must(uuid.NewV4())
+    data.Uid = jobuid.String()
+
+    t.SetCount(data.Uid, 1)
+    t.SetBan(data.Uid, 0)
+    t.SetMatch(data.Uid, 0)
+    t.SetGrammar(grammarFile, data.Uid)
+
+    go func() {
+        log.Printf("Start cassie manager")
+        var mngr message.MessageManager
+        mngr = &message.MessageCassie{}
+        mngr.Init(uid, nil)
+        mngr.Listen(transport.QUEUE_CASSIE, mngr.HandleMessage)
+        mngr.Close()
+    }()
+    go func() {
+        log.Printf("Start analyse manager")
+        var mngr message.MessageManager
+        mngr = &message.MessageAnalyse{}
+        mngr.Init(uid, nil)
+        mngr.Listen(transport.QUEUE_MESSAGE, mngr.HandleMessage)
+        mngr.Close()
+    }()
+    go func() {
+        log.Printf("Start result manager")
+        var mngr message.MessageManager
+        mngr = &message.MessageResult{}
+        mngr.Init(uid, resChan)
+        //mngr.Init(uid, nil)
+        mngr.Listen(transport.QUEUE_RESULT, mngr.HandleMessage)
+        mngr.Close()
+    }()
 
     modelTo := g.Run[0].Model
     modelVariablesTo := g.Models[modelTo].Start
-    redisClient.Set("logol:" + data.Uid + ":grammar", grammar, 0)
-    redisClient.Set("logol:" + data.Uid + ":count", len(modelVariablesTo), 0).Err()
-    redisClient.Set("logol:" + data.Uid + ":match", 0, 0).Err()
-    redisClient.Set("logol:" + data.Uid + ":ban", 0, 0).Err()
-
-    testMsgHandler := msgHandler.NewMsgHandler("localhost", 5672, "guest", "guest")
-    go testMsgHandler.Listen("test", nil)
-    cassieHandler := msgHandler.NewMsgHandler("localhost", 5672, "guest", "guest")
-    go cassieHandler.Cassie("test", nil)
-    resultHandler := msgHandler.NewMsgHandler("localhost", 5672, "guest", "guest")
-    go resultHandler.Results(resChan, "test", nil)
 
     for i := 0; i < len(modelVariablesTo); i++ {
         modelVariableTo := modelVariablesTo[i]
@@ -104,46 +79,38 @@ func startGrammar(resChan chan [][]logol.Match, grammarFile string) ([][] logol.
         data.ModelVariable = modelVariableTo
         data.Spacer = true
         data.RunIndex = 0
-
-        json_msg, _ := json.Marshal(data)
-        redisClient.Set(u1.String(), json_msg, 0).Err()
-        log.Printf("Send message %s, %s", u1.String(), string(publish_msg.Body))
-
-        ch.Publish(
-            "", // exchange
-            "logol-analyse-test", // key
-            false, // mandatory
-            false, // immediate
-            publish_msg,
-        )
+        t.SendMessage(transport.QUEUE_MESSAGE, data)
     }
 
     stopSent := false
     nbResults := 0
     firstResult := make([][]logol.Match, 0)
+    log.Printf("Wait for results now....")
+
     for result := range resChan {
         nbResults += 1
         if nbResults == 1 {
             firstResult = result
         }
-        if ! stopSent {
-            stop(ch)
-            stopSent = true
+        count, ban, matches := t.GetProgress(data.Uid)
+        log.Printf("Progress %d %d %d", count, ban, matches)
+        if matches + ban >= count {
+            if ! stopSent {
+                stop(t)
+                stopSent = true
+            }
         }
     }
 
-
-    redisClient.Del("logol:" + data.Uid + ":count")
-    redisClient.Del("logol:" + data.Uid + ":match")
-    redisClient.Del("logol:" + data.Uid + ":ban")
-    ch.ExchangeDelete("logol-event-exchange-test", false, false)
-    ch.QueueDelete("logol-analyse-test", false, false, false)
-    ch.QueueDelete("logol-result-test", false, false, false)
-    ch.QueueDelete("logol-cassie-test", false, false, false)
+    t.Clear(data.Uid)
+    t.Close()
 
     return firstResult
 }
+
+
 func TestGrammar(t *testing.T) {
+    log.Printf("Test grammar")
     //handler := Handler{}
     grammar := filepath.Join("testdata", "grammar.txt")
     resChan := make(chan [][]logol.Match)
@@ -160,6 +127,7 @@ func TestGrammar(t *testing.T) {
     }
 
 }
+
 
 func TestNegConstraint(t *testing.T) {
     //handler := Handler{}

@@ -1,25 +1,26 @@
-// Listen to result events and write each match to output file
-//
-// Only 1 instance of logolResult should run for a search
-
 package main
 
+
 import (
-        listener "org.irisa.genouest/logol/lib/listener"
-        logol "org.irisa.genouest/logol/lib/types"
-        logs "org.irisa.genouest/logol/lib/log"
+        "log"
+        "os"
+        message "org.irisa.genouest/logol/lib/message"
+        transport "org.irisa.genouest/logol/lib/transport"
 )
 
-var logger = logs.GetLogger("logol.result")
 
 func main() {
-    logger.Infof("Listen to results")
-    resChan := make(chan [][]logol.Match)
-    handler := listener.NewMsgHandler("localhost", 5672, "guest", "guest")
-    go handler.Results(resChan, "test", nil)
-    nbResults := 0
-    for _ = range resChan {
-        nbResults += 1
-        logger.Infof("NbResults:%d", nbResults)
+    log.Printf("Listen to results")
+    uid := "test"
+    os_uid := os.Getenv("LOGOL_UID")
+    if os_uid != "" {
+        uid = os_uid
     }
+    //handler := listener.NewMsgHandler("localhost", 5672, "guest", "guest")
+    //handler.Cassie("test", nil)
+    var mngr message.MessageManager
+    mngr = &message.MessageResult{}
+    mngr.Init(uid, nil)
+    mngr.Listen(transport.QUEUE_RESULT, mngr.HandleMessage)
+    mngr.Close()
 }

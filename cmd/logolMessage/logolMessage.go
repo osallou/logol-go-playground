@@ -2,38 +2,27 @@
 
 package main
 
+
 import (
-        //"fmt"
-        //"log"
-        //"gopkg.in/yaml.v2"
+        "log"
         "os"
-        "github.com/streadway/amqp"
-        //logol "org.irisa.genouest/logol/lib/types"
-        msgHandler "org.irisa.genouest/logol/lib/listener"
+        transport "org.irisa.genouest/logol/lib/transport"
+        message "org.irisa.genouest/logol/lib/message"
 )
 
 
 func main() {
-
-    rabbitConUrl := "amqp://guest:guest@localhost:5672"
-    osRabbitConUrl := os.Getenv("LOGOL_RABBITMQ_ADDR")
-    if osRabbitConUrl != "" {
-        rabbitConUrl = osRabbitConUrl
+    log.Printf("Listen to analyse")
+    uid := "test"
+    os_uid := os.Getenv("LOGOL_UID")
+    if os_uid != "" {
+        uid = os_uid
     }
-
-    //connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
-    //    "guest", "guest", "localhost", 5672)
-    conn, _ := amqp.Dial(rabbitConUrl)
-    ch, _ := conn.Channel()
-    _, _ = ch.QueueDeclare(
-      "logol-analyse-test", // name
-      false,   // durable
-      false,   // delete when usused
-      false,   // exclusive
-      false,   // no-wait
-      nil,     // arguments
-    )
-
-    handler := msgHandler.NewMsgHandler("localhost", 5672, "guest", "guest")
-    handler.Listen("test", nil)
+    //handler := listener.NewMsgHandler("localhost", 5672, "guest", "guest")
+    //handler.Cassie("test", nil)
+    var mngr message.MessageManager
+    mngr = &message.MessageAnalyse{}
+    mngr.Init(uid, nil)
+    mngr.Listen(transport.QUEUE_MESSAGE, mngr.HandleMessage)
+    mngr.Close()
 }
