@@ -88,8 +88,12 @@ func (m *MessageResult) HandleMessage(result logol.Result) (ok bool) {
 
     if ! m.outfileOpen {
         m.outfileOpen = true
-        logger.Infof("Create output file %s", "logol." + m.uid + ".out")
-        outfile, err := os.Create("logol." + m.uid + ".out")
+        outFilePath := "logol." + m.uid + ".out"
+        if result.Outfile != "" {
+            outFilePath = result.Outfile
+        }
+        logger.Infof("Create output file %s", outFilePath)
+        outfile, err := os.Create(outFilePath)
         if err != nil {
         logger.Errorf("Failed to open output file")
         return false

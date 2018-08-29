@@ -26,6 +26,7 @@ rabbitmq and redis connection url are given via env variables:
 
     LOGOL_REDIS_ADDR=localhost:6379
     LOGOL_RABBITMQ_ADDR=amqp://guest:guest@localhost:5672
+    LOGOL_DEBUG=1 # to activate DEBUG log level, else level INFO
 
 
 in cmd/logol[XXX]:

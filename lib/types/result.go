@@ -9,6 +9,7 @@ type Event struct {
 }
 
 type Result struct {
+    Outfile string
     SequenceFile string
     RunIndex int
     Uid string

@@ -18,6 +18,7 @@ import (
         "gopkg.in/yaml.v2"
         "github.com/satori/go.uuid"
         logol "org.irisa.genouest/logol/lib/types"
+        message "org.irisa.genouest/logol/lib/message"
         transport "org.irisa.genouest/logol/lib/transport"
         // msg "org.irisa.genouest/logol/lib/message"
         logs "org.irisa.genouest/logol/lib/log"
@@ -29,22 +30,40 @@ var logger = logs.GetLogger("logol.client")
 func main() {
     var maxpatternlen int64
     var mode int64
+    var standalone int64
+    var grammarFile string
+    var sequenceFile string
+    var uid string
+    var outfile string
+
     flag.Int64Var(&maxpatternlen, "maxpatternlen", 1000, "Maximum size of patterns to search")
     flag.Int64Var(&mode, "mode", 0, "Mode: 0=DNA, 1=RNA, 2=Protei")
+    flag.Int64Var(&standalone, "standalone", 0, "Run in standalone mode, 0: multi process, 1: standalone")
+    flag.StringVar(&grammarFile, "grammar", "grammar.txt", "Grammar file path")
+    flag.StringVar(&uid, "uid", "run", "Unique identifier (will create result file logol.*uid*.out)")
+    flag.StringVar(&sequenceFile, "sequence", "sequence.fasta", "Sequence file path")
+    flag.StringVar(&outfile, "out", "", "Output file path")
     flag.Parse()
     logger.Infof("option maxpatternlen: %d", maxpatternlen)
     logger.Infof("option mode: %d", mode)
 
+    /*
     uid := "test"
     os_uid := os.Getenv("LOGOL_UID")
     if os_uid != "" {
         uid = os_uid
-    }
+    }*/
+    /*
     grammarFile := "grammar.txt"
     osGrammar := os.Getenv("LOGOL_GRAMMAR")
     if osGrammar != "" {
         grammarFile = osGrammar
+    }*/
+    if _, err := os.Stat(grammarFile); os.IsNotExist(err) {
+          log.Fatalf("Grammar file %s does not exist", grammarFile)
     }
+
+
     grammar, _ := ioutil.ReadFile(grammarFile)
     err, g := logol.LoadGrammar([]byte(grammar))
     if err != nil {
@@ -56,6 +75,15 @@ func main() {
     }
     g.Options["MAX_PATTERN_LENGTH"] = maxpatternlen
     g.Options["MODE"] = mode
+    if g.Sequence == "" {
+        g.Sequence = sequenceFile
+    }
+
+    if _, err := os.Stat(g.Sequence); os.IsNotExist(err) {
+          log.Fatalf("Sequence file %s does not exist", g.Sequence)
+    }
+
+
     updatedGrammar, _ := yaml.Marshal(&g)
 
 
@@ -69,12 +97,40 @@ func main() {
     data := logol.NewResult()
     jobuid := uuid.Must(uuid.NewV4())
     data.Uid = jobuid.String()
+    data.Outfile = outfile
     logger.Infof("Launch job %s", jobuid.String())
 
     t.SetCount(data.Uid, 1)
     t.SetBan(data.Uid, 0)
     t.SetMatch(data.Uid, 0)
     t.SetGrammar(updatedGrammar, data.Uid)
+
+    if standalone == 1 {
+        go func() {
+            log.Printf("Start cassie manager")
+            var mngr message.MessageManager
+            mngr = &message.MessageCassie{}
+            mngr.Init(uid, nil)
+            mngr.Listen(transport.QUEUE_CASSIE, mngr.HandleMessage)
+            mngr.Close()
+        }()
+        go func() {
+            log.Printf("Start analyse manager")
+            var mngr message.MessageManager
+            mngr = &message.MessageAnalyse{}
+            mngr.Init(uid, nil)
+            mngr.Listen(transport.QUEUE_MESSAGE, mngr.HandleMessage)
+            mngr.Close()
+        }()
+        go func() {
+            log.Printf("Start result manager")
+            var mngr message.MessageManager
+            mngr = &message.MessageResult{}
+            mngr.Init(uid, nil)
+            mngr.Listen(transport.QUEUE_RESULT, mngr.HandleMessage)
+            mngr.Close()
+        }()
+    }
 
     for i := 0; i < len(modelVariablesTo); i++ {
         modelVariableTo := modelVariablesTo[i]

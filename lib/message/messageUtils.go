@@ -87,6 +87,7 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                     logger.Debugf("Go to next main model %s:%s", modelTo, modelVariableTo)
                     tmpResult := logol.NewResult()
                     tmpResult.Uid = data.Uid
+                    tmpResult.Outfile = data.Outfile
                     //data.From = make([]string, 0)
                     tmpResult.PrevMatches = append(data.PrevMatches, data.Matches)
                     tmpResult.Matches = make([]logol.Match, 0)
@@ -195,6 +196,7 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
     callModel := curVariable.Model.Name
     tmpResult := logol.NewResult()
     tmpResult.Uid = data.Uid
+    tmpResult.Outfile = data.Outfile
     tmpResult.Step = transport.STEP_PRE
     tmpResult.Iteration = data.Iteration + 1
     tmpResult.From = data.From
