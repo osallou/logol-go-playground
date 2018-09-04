@@ -2,6 +2,7 @@ package logol
 
 import (
         "gopkg.in/yaml.v2"
+        "encoding/json"
 )
 
 type Event struct {
@@ -41,6 +42,116 @@ func NewResult() Result {
 
 func (m Result) Dumps() (out []byte, err error) {
     return yaml.Marshal(&m)
+}
+
+type matchPosition struct {
+    MinPos int
+    PreSpacer bool
+    MaxPos int
+    PostSpacer bool
+    Gotcha bool
+}
+func findMatchSurroundingPositions(uid string, matches []Match, position matchPosition) (positions matchPosition) {
+    // TODO
+
+    nbmatches := len(matches)
+    if nbmatches == 0 {
+        return position
+    }
+    for _, match := range matches {
+        pos_json, _ := json.Marshal(position)
+        logger.Errorf("Position object %s", pos_json)
+        logger.Errorf("Gotcha ? %s vs %s", match.Uid, uid)
+        if match.Uid == uid {
+            // found match
+            logger.Errorf("gotcha!")
+            position.Gotcha = true
+            continue
+        } else {
+            if ! position.Gotcha {
+                // check in children
+                position = findMatchSurroundingPositions(uid, match.Children, position)
+                if position.Gotcha {
+                    if position.MaxPos == -1 {
+                        // Found match but not its next position
+                        continue
+                    } else {
+                        // Found everything, exiting
+                        return position
+                    }
+                }
+            }
+        }
+
+        if ! position.Gotcha {
+            // Looking for prev position
+            if match.SpacerVar {
+                position.PreSpacer = true
+                continue
+            }
+            if match.End > -1 {
+                position.MinPos =  match.End
+                position.PreSpacer = false
+                continue
+            } else {
+                if len(match.Children) == 0 {
+                    position.PreSpacer = true
+                    continue
+                }
+                position = findMatchSurroundingPositions(uid, match.Children, position)
+                if position.MinPos == -1 {
+                    position.PreSpacer = true
+                }
+            }
+        }
+
+        if position.Gotcha {
+            logger.Errorf("Search next position")
+            // Look for next position
+            if match.SpacerVar {
+                position.PostSpacer = true
+                continue
+            }
+            if match.Start > -1 {
+                logger.Errorf("Current start: %d", match.Start)
+                position.MaxPos =  match.Start
+                break
+            } else {
+                if len(match.Children) == 0 {
+                    position.PostSpacer = true
+                    continue
+                }
+                position = findMatchSurroundingPositions(uid, match.Children, position)
+                if position.MaxPos == -1 {
+                    position.PostSpacer = true
+                }
+                //position.PostSpacer = true
+                continue
+            }
+        }
+    }
+    return position
+}
+func (r Result) FindSurroundingPositions(uid string) (min_pos int, pre_spacer bool, max_pos int, post_spacer bool){
+    // TODO
+    logger.Debugf("FindSurroundingPositions:%s", uid)
+    mpos := matchPosition{}
+    mpos.MinPos = -1
+    mpos.MaxPos = -1
+    mpos.PreSpacer = true
+    position := findMatchSurroundingPositions(uid, r.Matches, mpos)
+    if ! position.Gotcha {
+        for _, matches := range r.PrevMatches {
+                position = findMatchSurroundingPositions(uid, matches, mpos)
+                if position.Gotcha {
+                    break
+                }
+        }
+    }
+    if position.Gotcha {
+        return position.MinPos, position.PreSpacer, position.MaxPos, position.PostSpacer
+    }
+    return 0, true, 0, true
 }
 
 func (m Result) GetFirstMatchAnalysable() (int){

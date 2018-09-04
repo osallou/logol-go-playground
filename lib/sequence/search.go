@@ -138,11 +138,20 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
         hasUndefined = true
         undefinedVars = append(undefinedVars, _undefinedVars...)
     }
+    /*
     _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Content, contextVars)
+    logger.Debugf("Test content constraint %t ", _hasUndefined)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }*/
+    _hasUndefined, _undefinedVars = utils.HasUndefineContentVar(curVariable.String_constraints.Content, contextVars)
     if _hasUndefined {
         hasUndefined = true
         undefinedVars = append(undefinedVars, _undefinedVars...)
     }
+
+
     _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Min, contextVars)
     if _hasUndefined {
         hasUndefined = true
@@ -198,6 +207,7 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
     undefinedVars = uniques(undefinedVars)
 
     nbUndefinedVars := len(undefinedVars)
+    logger.Debugf("Depends on undefined variables %s.%s %d", model, modelVariable, nbUndefinedVars)
     for i:=0;i<nbUndefinedVars;i++ {
             contentConstraint := undefinedVars[i]
             content, ok := contextVars[contentConstraint]
@@ -234,6 +244,7 @@ func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match log
     if curVariable.Value == "_" {
         fakeMatch := logol.NewMatch()
         fakeMatch.Id = modelVariable
+        fakeMatch.Info = "_"
         fakeMatch.Model = model
         fakeMatch.Spacer = true
         fakeMatch.SpacerVar = true
@@ -520,7 +531,7 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         }
         newMatch.End = int(elem.GetPos()) + pLen
         newMatch.Info = curVariable.Value
-        logger.Debugf("Cassie found %d:%d:%d:%d", newMatch.Start, newMatch.End, newMatch.Sub, newMatch.Indel)
+        logger.Errorf("Cassie found %d:%d:%d:%d", newMatch.Start, newMatch.End, newMatch.Sub, newMatch.Indel)
         if newMatch.Start < match.MinPosition {
             logger.Debugf("skip match at wrong position: %d" , newMatch.Start)
             continue
@@ -757,17 +768,20 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
     if curVariable.HasStartConstraint(){
         logger.Debugf("Control start")
         minS, maxS := curVariable.GetStartConstraint()
+        logger.Errorf("Control string constraint %s:%s", minS, maxS)
         min, _ := utils.GetRangeValue(minS, contextVars)
         max, _ := utils.GetRangeValue(maxS, contextVars)
+        logger.Errorf("Control start %d:%d", min, max)
         if (min != -1 && match.Start < min) || (max != -1 && match.Start > max) {
             return newMatch, true
         }
     }
     if curVariable.HasEndConstraint(){
-        logger.Debugf("Control end")
+        logger.Errorf("Control end")
         minS, maxS := curVariable.GetEndConstraint()
         min, _ := utils.GetRangeValue(minS, contextVars)
         max, _ := utils.GetRangeValue(maxS, contextVars)
+        logger.Errorf("Control end %d:%d", min, max)
         if (min != -1 && match.End < min) || (max != -1 && match.End > max) {
             return newMatch, true
         }

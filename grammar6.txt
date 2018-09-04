@@ -1,0 +1,23 @@
+models:
+  mod1:
+   comment: 'mod1()'
+   param: []
+   start:
+     - var2
+   vars:
+     var2:
+         value: null
+         string_constraints:
+           content: 'R1'
+         next:
+           - var3
+     var3:
+         value: 'aaa'
+         string_constraints:
+            saveas: 'R1'
+         next: null
+run:
+ - model: mod1
+   param: []
+
+sequence: /home/osallou/Development/NOSAVE/gopath/src/org.irisa.genouest/logol/sequence.txt

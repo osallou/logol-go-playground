@@ -77,6 +77,26 @@ func getValueFromExpression(expr string, contextVars map[string]logol.Match) (va
     return getPropertyValueFromContext(prop, variable, contextVars)
 }
 
+
+func HasUndefineContentVar(variable string, contextVars map[string]logol.Match) (hasUndefined bool, undefinedVars []string) {
+    if variable == "" {
+        return false, undefinedVars
+    }
+    hasUndefined = false
+    undefinedVars = make([]string, 0)
+    if contextVars == nil {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, variable)
+    }
+    ctxVar, ok := contextVars[variable]
+    if ! ok || ctxVar.Start == -1 || ctxVar.End == -1 {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, variable)
+    }
+
+    return hasUndefined, undefinedVars
+}
+
 // check if an operation contains unknown or not defined variables
 func HasUndefinedRangeVars(expr string, contextVars map[string]logol.Match) (hasUndefined bool, undefinedVars []string) {
     if expr == "" {

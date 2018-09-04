@@ -5,19 +5,18 @@ package main
 
 import (
         "log"
-        "os"
+        //"os"
         transport "org.irisa.genouest/logol/lib/transport"
         message "org.irisa.genouest/logol/lib/message"
+        "github.com/namsral/flag"
 )
 
 
 func main() {
     log.Printf("Listen to analyse")
-    uid := "test"
-    os_uid := os.Getenv("LOGOL_UID")
-    if os_uid != "" {
-        uid = os_uid
-    }
+    var uid string
+    flag.StringVar(&uid, "uid", "run", "run identifier, same as logolClient")
+    flag.Parse()
     //handler := listener.NewMsgHandler("localhost", 5672, "guest", "guest")
     //handler.Cassie("test", nil)
     var mngr message.MessageManager

@@ -107,10 +107,17 @@ func (m *MessageResult) HandleMessage(result logol.Result) (ok bool) {
         return false
     }
     logger.Debugf("Match for job %s", result.Uid)
-    matchOk := logol.CheckMatches(result.Matches)
+    matchOk := logol.CheckMatches(result.Matches, 0, true)
     if ! matchOk {
         m.msg.Transport.AddBan(result.Uid, 1)
         return false
+    }
+    for i:=0;i<len(result.PrevMatches);i++ {
+        matchOk := logol.CheckMatches(result.PrevMatches[i], 0, true)
+        if ! matchOk {
+            m.msg.Transport.AddBan(result.Uid, 1)
+            return false
+        }
     }
     m.nbMatches += 1
     if m.nbMatches <= m.maxMatches {
@@ -263,6 +270,7 @@ func (m *MessageCassie) HandleMessage(result logol.Result) (ok bool) {
     if ! m.msgLoaded {
         t := transport.GetTransport(transport.QUEUE_CASSIE)
         m.msg = NewMsgManager(m.uid, t)
+        m.msg.IsCassie = true
         m.msgLoaded = true
     }
 

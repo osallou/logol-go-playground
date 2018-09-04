@@ -36,15 +36,23 @@ func NewMatch() Match {
     return match
 }
 
-func CheckMatches(matches []Match) (bool) {
+func CheckMatches(matches []Match, start_pos int, prev_spacer bool) (bool) {
     // Checks that start/end of consecutive matches corresponds
     end_pos := 0
-    for _, m := range matches {
+    for index, m := range matches {
+        if m.SpacerVar {
+            prev_spacer = true
+            continue
+        }
         if m.Start == -1 || m.End == -1 {
             logger.Errorf("Humm, something wrong occured, a variable is still not defined %s.%s: %s", m.Model, m.Id, m.Uid)
             return false
         }
-        if ! m.Spacer {
+        if index == 0 && start_pos > 0 && m.Start != start_pos {
+            logger.Errorf("position does not fit with starting position %d", start_pos)
+            return false
+        }
+        if ! prev_spacer {
             if m.Overlap {
                 if m.End < end_pos {
                     logger.Errorf("position does not fit with overlap")
@@ -53,6 +61,9 @@ func CheckMatches(matches []Match) (bool) {
             }
             if (m.Start == end_pos || end_pos == 0) {
                 end_pos = m.End
+            } else {
+                logger.Errorf("position does not fit with previous match end")
+                return false
             }
         } else {
             if (m.Start >= end_pos) {
@@ -62,6 +73,10 @@ func CheckMatches(matches []Match) (bool) {
                 return false
             }
         }
+        if len(m.Children) > 0 {
+            CheckMatches(m.Children, m.Start, prev_spacer)
+        }
+        prev_spacer = false
 
     }
     return true

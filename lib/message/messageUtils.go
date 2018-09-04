@@ -7,6 +7,7 @@ import (
     "encoding/json"
     //"log"
     "sort"
+    "strconv"
     "strings"
     logol "org.irisa.genouest/logol/lib/types"
     seq "org.irisa.genouest/logol/lib/sequence"
@@ -21,6 +22,7 @@ import (
 // Structure managing global access to different tools and information
 type msgManager struct {
     Chuid string
+    IsCassie bool
     Grammar logol.Grammar
     SearchUtils seq.SearchUtils
     Transport transport.Transport
@@ -239,17 +241,67 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
         m.publishMessage("logol-result-" + m.Chuid, publish_msg)
         return
     }
-    if result.YetToBeDefined[index].Spacer && ! result.YetToBeDefined[index].IsModel {
+
+    matchToAnalyse := result.YetToBeDefined[index]
+    min_pos, pre_spacer, max_pos, post_spacer := result.FindSurroundingPositions(matchToAnalyse.Uid)
+    logger.Errorf("YTBD: %d, %t, %d, %t", min_pos, pre_spacer, max_pos, post_spacer)
+
+    curVariable := m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id]
+    saveVariable := m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id]
+
+    if pre_spacer {
+        if curVariable.String_constraints.Start.Min == "" {
+            curVariable.String_constraints.Start.Min = strconv.Itoa(min_pos)
+        }
+        if curVariable.String_constraints.Start.Max == "" {
+            curVariable.String_constraints.Start.Max = strconv.Itoa(max_pos)
+        }
+    } else {
+        if matchToAnalyse.MinPosition < min_pos {
+            matchToAnalyse.MinPosition = min_pos
+        }
+        if curVariable.String_constraints.Start.Min == "" {
+            curVariable.String_constraints.Start.Min = strconv.Itoa(min_pos)
+        }
+        if curVariable.String_constraints.Start.Max == "" {
+            curVariable.String_constraints.Start.Max = strconv.Itoa(min_pos)
+        }
+    }
+    if post_spacer {
+        if curVariable.String_constraints.End.Min == "" {
+            curVariable.String_constraints.End.Min = strconv.Itoa(min_pos)
+        }
+        if curVariable.String_constraints.End.Max == "" {
+            curVariable.String_constraints.End.Max = strconv.Itoa(max_pos)
+        }
+    } else {
+        if curVariable.String_constraints.End.Min == "" {
+            curVariable.String_constraints.End.Min = strconv.Itoa(max_pos)
+        }
+        if curVariable.String_constraints.End.Max == "" {
+            curVariable.String_constraints.End.Max = strconv.Itoa(max_pos)
+        }
+    }
+    m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id] = curVariable
+    toto, _ := json.Marshal(m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id])
+    logger.Errorf("TOTO %s", toto)
+
+
+    if pre_spacer {
+        matchToAnalyse.Spacer = true
+    } else {
+        matchToAnalyse.Spacer = false
+    }
+
+    if ! m.IsCassie && matchToAnalyse.Spacer && ! matchToAnalyse.IsModel {
         // Forward to cassie
         publish_msg := m.prepareMessage(model, modelVariable, result)
         m.publishMessage("logol-cassie-" + m.Chuid, publish_msg)
         return
     }
 
-    matchToAnalyse := result.YetToBeDefined[index]
     matchChannel := make(chan logol.Match)
     // If is model, just look at children to compute and check constraints
-    // TODO manage model case
 
     // Else find it, forward to cassie if needed
     nbMatches := 0
@@ -268,6 +320,8 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
         publish_msg := m.prepareMessage("ytbd", "ytbd", result)
         m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
     }
+
+    m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id] = saveVariable
 
     if nbMatches == 0 {
         //m.Client.Incr("logol:" + result.Uid + ":ban")
@@ -493,6 +547,7 @@ func (m msgManager) handleMessage(result logol.Result) {
             if ! match.SpacerVar {
                 result.Matches = append(prevMatches, match)
             } else {
+                result.Matches = append(prevMatches, match)
                 result.Spacer = true
             }
 
