@@ -83,22 +83,13 @@ func (s SearchUtils) UpdateByUid(match logol.Match, matches []logol.Match){
 }
 
 // Find a variable that could not be found before (due to other constraints)
-func (s SearchUtils) FindToBeAnalysed(mch chan logol.Match, grammar logol.Grammar, match logol.Match, matches[]logol.Match) {
-    contextVars := make(map[string]logol.Match)
-    for _, uid := range match.YetToBeDefined {
-        for _, m := range matches {
-            elt, found := m.GetByUid(uid)
-            if found {
-                contextVars[elt.SavedAs] = elt
-                break
-            }
-        }
-    }
+func (s SearchUtils) FindToBeAnalysed(mch chan logol.Match, grammar logol.Grammar, match logol.Match, matches[]logol.Match, contextVars map[string]logol.Match) {
     if match.Spacer {
         s.FindCassie(mch, grammar, match, match.Model, match.Id, contextVars, match.Spacer)
     } else {
         s.Find(mch, grammar, match, match.Model, match.Id, contextVars, match.Spacer)
     }
+
 }
 
 // Checks if a variable can be analysed now according to its constraints and current context
@@ -257,7 +248,7 @@ func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match log
         return
     }
 
-    if spacer {
+    if spacer && curVariable.HasContentConstraint() {
         fakeMatch := logol.NewMatch()
         fakeMatch.Spacer = true
         // fakeMatch.NeedCassie = true
@@ -531,7 +522,7 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         }
         newMatch.End = int(elem.GetPos()) + pLen
         newMatch.Info = curVariable.Value
-        logger.Errorf("Cassie found %d:%d:%d:%d", newMatch.Start, newMatch.End, newMatch.Sub, newMatch.Indel)
+        logger.Debugf("Cassie found %d:%d:%d:%d", newMatch.Start, newMatch.End, newMatch.Sub, newMatch.Indel)
         if newMatch.Start < match.MinPosition {
             logger.Debugf("skip match at wrong position: %d" , newMatch.Start)
             continue
@@ -560,6 +551,8 @@ func (s SearchUtils) FindAny(mch chan logol.Match, grammar logol.Grammar, match 
             maxSearchIndex = seqLen - patternLen
         }
         logger.Debugf("Loop over %d:%d", match.MinPosition , maxSearchIndex)
+        minPos := match.MinPosition
+        if minPos < 0 { minPos = 0}
         for i:=match.MinPosition; i < maxSearchIndex; i++ {
             // seqPart := s.SequenceHandler.GetContent(i, i + patternLen)
             newMatch := logol.NewMatch()
@@ -766,22 +759,19 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
 
     curVariable := grammar.Models[match.Model].Vars[match.Id]
     if curVariable.HasStartConstraint(){
-        logger.Debugf("Control start")
         minS, maxS := curVariable.GetStartConstraint()
-        logger.Errorf("Control string constraint %s:%s", minS, maxS)
+        logger.Debugf("Control string constraint %s:%s", minS, maxS)
         min, _ := utils.GetRangeValue(minS, contextVars)
         max, _ := utils.GetRangeValue(maxS, contextVars)
-        logger.Errorf("Control start %d:%d", min, max)
         if (min != -1 && match.Start < min) || (max != -1 && match.Start > max) {
             return newMatch, true
         }
     }
     if curVariable.HasEndConstraint(){
-        logger.Errorf("Control end")
         minS, maxS := curVariable.GetEndConstraint()
         min, _ := utils.GetRangeValue(minS, contextVars)
         max, _ := utils.GetRangeValue(maxS, contextVars)
-        logger.Errorf("Control end %d:%d", min, max)
+        logger.Debugf("Control end %d:%d", min, max)
         if (min != -1 && match.End < min) || (max != -1 && match.End > max) {
             return newMatch, true
         }

@@ -105,6 +105,7 @@ func failOnError(err error, msg string) {
 type Transport interface {
     Init(uid string)
     GetId() string
+    GetQueueStatus(queue QueueType) (pending int, consumers int)
     GetProgress(uid string) (count int, ban int, match int)
     AddBan(uid string, nb int64)
     AddCount(uid string, nb int64)

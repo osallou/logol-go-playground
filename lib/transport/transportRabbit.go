@@ -21,6 +21,22 @@ type TransportRabbit struct {
     redis *redis.Client
 }
 
+func (t TransportRabbit) GetQueueStatus(queueId QueueType) (pending int, consumers int) {
+    queueName := "analyse"
+    switch queueId {
+    case QUEUE_MESSAGE:
+        queueName = "analyse"
+    case QUEUE_RESULT:
+        queueName = "result"
+    case QUEUE_CASSIE:
+        queueName = "cassie"
+    }
+    queue, _ := t.ch.QueueInspect("logol-" + queueName + "-" + t.id)
+    pending += queue.Messages
+    consumers += queue.Consumers
+    return pending, consumers
+}
+
 func (t TransportRabbit) GetId() string {
     return t.id
 }

@@ -12,6 +12,7 @@ import (
     logol "org.irisa.genouest/logol/lib/types"
     seq "org.irisa.genouest/logol/lib/sequence"
     transport "org.irisa.genouest/logol/lib/transport"
+    utils "org.irisa.genouest/logol/lib/utils"
     //redis "github.com/go-redis/redis"
     //"github.com/streadway/amqp"
     "github.com/satori/go.uuid"
@@ -244,54 +245,111 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
 
     matchToAnalyse := result.YetToBeDefined[index]
     min_pos, pre_spacer, max_pos, post_spacer := result.FindSurroundingPositions(matchToAnalyse.Uid)
-    logger.Errorf("YTBD: %d, %t, %d, %t", min_pos, pre_spacer, max_pos, post_spacer)
+    logger.Debugf("YTBD: %d, %t, %d, %t", min_pos, pre_spacer, max_pos, post_spacer)
 
     curVariable := m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id]
     saveVariable := m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id]
 
     if pre_spacer {
-        if curVariable.String_constraints.Start.Min == "" {
+        if curVariable.String_constraints.Start.Min == ""  && min_pos > -1 {
             curVariable.String_constraints.Start.Min = strconv.Itoa(min_pos)
         }
-        if curVariable.String_constraints.Start.Max == "" {
+        if curVariable.String_constraints.Start.Max == ""  && max_pos > -1 {
             curVariable.String_constraints.Start.Max = strconv.Itoa(max_pos)
         }
     } else {
         if matchToAnalyse.MinPosition < min_pos {
             matchToAnalyse.MinPosition = min_pos
         }
-        if curVariable.String_constraints.Start.Min == "" {
+        if curVariable.String_constraints.Start.Min == ""  && min_pos > -1 {
             curVariable.String_constraints.Start.Min = strconv.Itoa(min_pos)
         }
-        if curVariable.String_constraints.Start.Max == "" {
+        if curVariable.String_constraints.Start.Max == ""  && min_pos > -1 {
             curVariable.String_constraints.Start.Max = strconv.Itoa(min_pos)
         }
     }
     if post_spacer {
-        if curVariable.String_constraints.End.Min == "" {
+        if curVariable.String_constraints.End.Min == ""  && min_pos > -1 {
             curVariable.String_constraints.End.Min = strconv.Itoa(min_pos)
         }
-        if curVariable.String_constraints.End.Max == "" {
+        if curVariable.String_constraints.End.Max == ""  && max_pos > -1 {
             curVariable.String_constraints.End.Max = strconv.Itoa(max_pos)
         }
     } else {
-        if curVariable.String_constraints.End.Min == "" {
+        if curVariable.String_constraints.End.Min == ""  && max_pos > -1 {
             curVariable.String_constraints.End.Min = strconv.Itoa(max_pos)
         }
-        if curVariable.String_constraints.End.Max == "" {
+        if curVariable.String_constraints.End.Max == ""  && max_pos > -1 {
             curVariable.String_constraints.End.Max = strconv.Itoa(max_pos)
         }
     }
-    m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id] = curVariable
-    toto, _ := json.Marshal(m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id])
-    logger.Errorf("TOTO %s", toto)
-
 
     if pre_spacer {
         matchToAnalyse.Spacer = true
     } else {
         matchToAnalyse.Spacer = false
     }
+
+    contextVars := make(map[string]logol.Match)
+    for _, uid := range matchToAnalyse.YetToBeDefined {
+        for _, m := range result.Matches {
+            elt, found := m.GetByUid(uid)
+            if found {
+                contextVars[elt.SavedAs] = elt
+                break
+            }
+        }
+    }
+
+    if curVariable.String_constraints.Start.Min != "" && curVariable.String_constraints.Start.Min == curVariable.String_constraints.Start.Max {
+        // we have a fixed position to start
+        matchToAnalyse.MinPosition, _ = utils.GetRangeValue(curVariable.String_constraints.Start.Min, contextVars)
+        matchToAnalyse.Spacer = false
+    } else {
+        if curVariable.String_constraints.End.Min != "" && curVariable.String_constraints.End.Min == curVariable.String_constraints.End.Max {
+            // we have a fixed end position
+            endPos, _ := utils.GetRangeValue(curVariable.String_constraints.End.Min, contextVars)
+            if curVariable.HasContentConstraint() {
+                content, isFixed, _ := curVariable.GetContentConstraint()
+                minContentLen := 0
+                maxContentLen := 0
+                if isFixed {
+                    minContentLen = len(content)
+                    maxContentLen = len(content)
+                } else {
+                    constrainedVar := contextVars[content]
+                    minContentLen = constrainedVar.End - constrainedVar.Start
+                    maxContentLen = minContentLen
+                }
+                if curVariable.HasDistanceConstraint() {
+                    _, maxDist := curVariable.GetDistanceConstraint()
+                    // minDistVal, _ := utils.GetRangeValue(minDist, contextVars)
+                    maxDistVal, _ := utils.GetRangeValue(maxDist, contextVars)
+                    minContentLen = minContentLen - maxDistVal
+                    maxContentLen = minContentLen + maxDistVal
+                }
+                curVariable.String_constraints.Start.Min = strconv.Itoa(endPos - maxContentLen)
+                if endPos - maxContentLen < 0 {
+                    curVariable.String_constraints.Start.Min = "0"
+                }
+                curVariable.String_constraints.Start.Max = strconv.Itoa(endPos - minContentLen)
+                if endPos - minContentLen < 0 {
+                    curVariable.String_constraints.Start.Max = "0"
+                }
+                if curVariable.String_constraints.Start.Min == curVariable.String_constraints.Start.Max {
+                    // we have a fixed position to start
+                    matchToAnalyse.MinPosition, _ = utils.GetRangeValue(curVariable.String_constraints.Start.Min, contextVars)
+                    matchToAnalyse.Spacer = false
+                }
+
+            }
+        }
+    }
+    //json_debug, _ := json.Marshal(curVariable)
+    //logger.Debugf("YTBD constraints narrow, spacer? %t, minpos: %d  , %s", matchToAnalyse.Spacer, matchToAnalyse.MinPosition, json_debug)
+
+
+    m.Grammar.Models[matchToAnalyse.Model].Vars[matchToAnalyse.Id] = curVariable
 
     if ! m.IsCassie && matchToAnalyse.Spacer && ! matchToAnalyse.IsModel {
         // Forward to cassie
@@ -310,7 +368,7 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
     if isModel {
         go m.SearchUtils.FixModel(matchChannel, matchToAnalyse)
     } else {
-        go m.SearchUtils.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches)
+        go m.SearchUtils.FindToBeAnalysed(matchChannel, m.Grammar, matchToAnalyse, result.Matches, contextVars)
     }
     result.YetToBeDefined = append(result.YetToBeDefined[:index], result.YetToBeDefined[index+1:]...)
     for match := range matchChannel {

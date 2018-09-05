@@ -2,7 +2,7 @@ package logol
 
 import (
         "gopkg.in/yaml.v2"
-        "encoding/json"
+        //"encoding/json"
 )
 
 type Event struct {
@@ -29,6 +29,7 @@ type Result struct {
     Param []Match
     YetToBeDefined []Match // temporary store matches depending on variables not yet defined
 }
+
 func NewResult() Result {
     result := Result{}
     result.From = make([]string, 0)
@@ -52,19 +53,14 @@ type matchPosition struct {
     Gotcha bool
 }
 func findMatchSurroundingPositions(uid string, matches []Match, position matchPosition) (positions matchPosition) {
-    // TODO
-
     nbmatches := len(matches)
     if nbmatches == 0 {
         return position
     }
     for _, match := range matches {
-        pos_json, _ := json.Marshal(position)
-        logger.Errorf("Position object %s", pos_json)
-        logger.Errorf("Gotcha ? %s vs %s", match.Uid, uid)
+        //pos_json, _ := json.Marshal(position)
         if match.Uid == uid {
             // found match
-            logger.Errorf("gotcha!")
             position.Gotcha = true
             continue
         } else {
@@ -106,14 +102,12 @@ func findMatchSurroundingPositions(uid string, matches []Match, position matchPo
         }
 
         if position.Gotcha {
-            logger.Errorf("Search next position")
             // Look for next position
             if match.SpacerVar {
                 position.PostSpacer = true
                 continue
             }
             if match.Start > -1 {
-                logger.Errorf("Current start: %d", match.Start)
                 position.MaxPos =  match.Start
                 break
             } else {

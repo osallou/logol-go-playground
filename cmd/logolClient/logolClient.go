@@ -41,7 +41,7 @@ func main() {
     flag.Int64Var(&standalone, "standalone", 0, "Run in standalone mode, 0: multi process, 1: standalone")
     flag.StringVar(&grammarFile, "grammar", "grammar.txt", "Grammar file path")
     flag.StringVar(&uid, "uid", "run", "Unique identifier (will create result file logol.*uid*.out)")
-    flag.StringVar(&sequenceFile, "sequence", "sequence.fasta", "Sequence file path")
+    flag.StringVar(&sequenceFile, "sequence", "", "Sequence file path")
     flag.StringVar(&outfile, "out", "", "Output file path")
     flag.Parse()
     logger.Infof("option maxpatternlen: %d", maxpatternlen)
@@ -75,7 +75,7 @@ func main() {
     }
     g.Options["MAX_PATTERN_LENGTH"] = maxpatternlen
     g.Options["MODE"] = mode
-    if g.Sequence == "" {
+    if sequenceFile != "" {
         g.Sequence = sequenceFile
     }
 
@@ -157,8 +157,13 @@ func main() {
     }()
 
     for notOver {
+        pending, consumers := t.GetQueueStatus(transport.QUEUE_MESSAGE)
+        log.Printf("Pending standard analyses: %d, by %d consumers", pending, consumers)
+        pending, consumers = t.GetQueueStatus(transport.QUEUE_CASSIE)
+        log.Printf("Pending cassie analyses: %d, by %d consumers", pending, consumers)
         count, ban, matches := t.GetProgress(data.Uid)
         log.Printf("Count: %d, Ban: %d, Matches: %d", count, ban, matches)
+
         if matches + ban == count {
             log.Printf("Search is over, exiting...")
             event := transport.MsgEvent{}
