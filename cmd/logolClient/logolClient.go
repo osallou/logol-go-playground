@@ -47,18 +47,6 @@ func main() {
     logger.Infof("option maxpatternlen: %d", maxpatternlen)
     logger.Infof("option mode: %d", mode)
 
-    /*
-    uid := "test"
-    os_uid := os.Getenv("LOGOL_UID")
-    if os_uid != "" {
-        uid = os_uid
-    }*/
-    /*
-    grammarFile := "grammar.txt"
-    osGrammar := os.Getenv("LOGOL_GRAMMAR")
-    if osGrammar != "" {
-        grammarFile = osGrammar
-    }*/
     if _, err := os.Stat(grammarFile); os.IsNotExist(err) {
           log.Fatalf("Grammar file %s does not exist", grammarFile)
     }
@@ -104,6 +92,17 @@ func main() {
     t.SetBan(data.Uid, 0)
     t.SetMatch(data.Uid, 0)
     t.SetGrammar(updatedGrammar, data.Uid)
+
+    go func() {
+        var tLog transport.Transport
+        tLog = transport.NewTransportRabbit()
+        tLog.Init(uid)
+        tLog.ListenLog(func(data string) bool{
+           logger.Warningf(data)
+           return true
+        })
+        tLog.Close()
+    }()
 
     if standalone == 1 {
         go func() {

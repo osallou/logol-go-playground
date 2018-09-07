@@ -8,7 +8,7 @@ import (
     //"log"
     "sort"
     "strconv"
-    "strings"
+    //"strings"
     logol "org.irisa.genouest/logol/lib/types"
     seq "org.irisa.genouest/logol/lib/sequence"
     transport "org.irisa.genouest/logol/lib/transport"
@@ -66,9 +66,13 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
         logger.Debugf("No next var")
         if len(data.From) > 0 {
             lastFrom := data.From[len(data.From) - 1]
+            /*
             elts := strings.Split(lastFrom, ".")
             backModel := elts[0]
             backVariable := elts[1]
+            */
+            backModel := lastFrom.Model
+            backVariable := lastFrom.Variable
             data.From = data.From[:len(data.From) - 1]
             data.Step = transport.STEP_POST
             data.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], m.Grammar.Models[model].Param)
@@ -203,8 +207,12 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
     tmpResult.Step = transport.STEP_PRE
     tmpResult.Iteration = data.Iteration + 1
     tmpResult.From = data.From
-    data.From = make([]string, 0)
-    tmpResult.From = append(tmpResult.From, model + "." + modelVariable)
+    data.From = make([]logol.From, 0)
+    newFrom := logol.From{}
+    newFrom.Model = model
+    newFrom.Variable = modelVariable
+    tmpResult.From  = append(tmpResult.From, newFrom)
+    //tmpResult.From = append(tmpResult.From, model + "." + modelVariable)
     tmpResult.ContextVars = data.ContextVars
     tmpResult.Context = append(tmpResult.Context, data.Matches)
     tmpResult.Matches = make([]logol.Match, 0)
@@ -502,9 +510,19 @@ func (m msgManager) handleMessage(result logol.Result) {
                 logger.Debugf("Continue iteration for %s, %s", model, modelVariable)
                 m.Transport.AddCount(result.Uid, 1)
                 //m.Client.IncrBy("logol:" + result.Uid + ":count", 1)
+                if m.Grammar.Models[model].Vars[modelVariable].Model.RepeatSpacer {
+                    result.Spacer = true
+                }
+                if m.Grammar.Models[model].Vars[modelVariable].Model.RepeatOverlap {
+                    result.Overlap = true
+                }
                 m.call_model(model, modelVariable, result, result.ContextVars[len(result.ContextVars) - 1])
             }
-            m.go_next(model, modelVariable, result)
+            if result.Iteration >= m.Grammar.Models[model].Vars[modelVariable].Model.RepeatMin {
+                m.go_next(model, modelVariable, result)
+            } else {
+                m.Transport.AddBan(result.Uid, 1)
+            }
         } else {
             m.Transport.AddBan(result.Uid, 1)
             //m.Client.Incr("logol:" + result.Uid + ":ban")
@@ -523,6 +541,9 @@ func (m msgManager) handleMessage(result logol.Result) {
         }
         match.Overlap = curVariable.Overlap
         match.Spacer = result.Spacer
+        if result.Overlap {
+            match.Overlap = true
+        }
 
         match.MinPosition = result.Position
 
@@ -531,8 +552,6 @@ func (m msgManager) handleMessage(result logol.Result) {
         canFindMatch := true
         if ! m.SearchUtils.CanFind(m.Grammar, &match, model, modelVariable, contextVars) {
             canFindMatch = false
-            // TODO, store in result.YetToBeDefined, add empty match with var name and model and continue
-            // should check and update later on
             go m.SearchUtils.FindFuture(matchChannel, match, model, modelVariable)
         } else {
             if result.Step == transport.STEP_CASSIE {
@@ -569,7 +588,7 @@ func (m msgManager) handleMessage(result logol.Result) {
                 continue
             }
             nbMatches += 1
-            result.From = make([]string, 0)
+            result.From = make([]logol.From, 0)
             for _, from := range prevFrom {
                 result.From = append(result.From, from)
             }
@@ -583,7 +602,6 @@ func (m msgManager) handleMessage(result logol.Result) {
             json_match, _ := json.Marshal(match)
             logger.Debugf("match:%s", json_match)
             if curVariable.String_constraints.SaveAs != "" {
-                //TODO
                 save_as := curVariable.String_constraints.SaveAs
                 contextVar, contextVarAlreadyDefined := contextVars[save_as]
                 if contextVarAlreadyDefined {
@@ -608,6 +626,8 @@ func (m msgManager) handleMessage(result logol.Result) {
                 result.Matches = append(prevMatches, match)
                 result.Spacer = true
             }
+            // Now disable overlap
+            result.Overlap = false
 
             m.go_next(model, modelVariable, result)
         }
@@ -640,4 +660,5 @@ func (m msgManager) handleMessage(result logol.Result) {
 
 func sendStats(model string, variable string, duration int64){
     // TODO
+    logger.Debugf("To be implemented")
 }

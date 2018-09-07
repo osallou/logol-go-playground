@@ -10,6 +10,7 @@ type Match struct {
     Model string
     Uid string
     MinPosition int
+    MaxMatchEndPos int // For Not constraint, match should not go above this limit
     Spacer bool
     Start int
     End int
@@ -20,7 +21,7 @@ type Match struct {
     MinRepeat int
     MaxRepeat int
     Duration int64  // Time.UnixNano
-    From []string
+    From []From
     YetToBeDefined []string
     //NeedCassie bool
     SavedAs string
@@ -82,6 +83,12 @@ func CheckMatches(matches []Match, start_pos int, prev_spacer bool) (bool) {
     return true
 }
 
+func (m Match) IsMaxPosExceeded() bool {
+    if m.MaxMatchEndPos > 0 && m.End > m.MaxMatchEndPos {
+        return true
+    }
+    return false
+}
 
 func (m Match) GetById(model string, id string) ([]Match, bool){
     // Parse match and match Children to find elements matching model and var name

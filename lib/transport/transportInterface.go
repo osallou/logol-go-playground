@@ -26,6 +26,7 @@ const QUEUE_CASSIE = 1
 const QUEUE_RESULT = 2
 const QUEUE_EVENT = 3
 const EXCHANGE_EVENT = 4
+const QUEUE_LOG = 5
 
 type MsgEvent struct {
     Step  int
@@ -37,9 +38,11 @@ const TRANSPORT_ALLINONE = 1
 var onceAnalyse sync.Once
 var onceResult sync.Once
 var onceCassie sync.Once
+var onceLog sync.Once
 var tAnalyse Transport
 var tResult Transport
 var tCassie Transport
+var tLog Transport
 
 func getTransportKind() int {
     transportKind := TRANSPORT_AMQP
@@ -87,6 +90,16 @@ func GetTransport(kind QueueType) (Transport) {
             }
         })
         return tCassie
+    case QUEUE_LOG:
+        onceLog.Do(func(){
+            transportKind := getTransportKind()
+            if transportKind == TRANSPORT_AMQP {
+                var t Transport
+                t = NewTransportRabbit()
+                tLog = t
+            }
+        })
+        return tLog
     }
     return nil
 }
@@ -94,6 +107,7 @@ func GetTransport(kind QueueType) (Transport) {
 
 
 type CallbackMessage func(data logol.Result) bool
+type CallbackLog func(data string) bool
 
 func failOnError(err error, msg string) {
   if err != nil {
@@ -102,6 +116,22 @@ func failOnError(err error, msg string) {
   }
 }
 
+// Transport is the interface that wraps message between search processes
+//
+// Init initialize the transport
+// GetId returns the identifier of current transport
+// GetQueueStatus returns the number of pending messages and number of consumers
+// GetProgress returns the number of final match, rejected matches and number of possibilities
+// Clear cleans temporary data
+// Close closes the transport
+// PrepareMessage takes a result and transform it in a string message
+// PublishMessage sends the message to defined destination/set of consumer
+// PublishExchange sends the message to all consumers
+// SendMessage calls PrepareMessage and PublishMessage
+// SendEvent calls PrepareMessage and PublishExchange
+// Listen starts the message event loop and callback function on message receival
+// GetGrammar returns the grammar for the input id
+// SetGrammar saves the grammar
 type Transport interface {
     Init(uid string)
     GetId() string
@@ -120,7 +150,9 @@ type Transport interface {
     PublishExchange(queueName string, publish_msg string)
     SendMessage(queue QueueType, data logol.Result) bool
     SendEvent(event MsgEvent) bool
+    SendLog(msg string) bool
     Listen(queueListen QueueType, fn CallbackMessage)
+    ListenLog(fn CallbackLog)
     GetGrammar(grammarId string) (g logol.Grammar, err bool)
     SetGrammar(grammar []byte, grammarId string) (err bool)
 }

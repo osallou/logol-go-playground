@@ -22,6 +22,8 @@ type VariableModel struct {
     Param []string
     RepeatMin int
     RepeatMax int
+    RepeatSpacer bool
+    RepeatOverlap bool
 }
 type RangeConstraint struct {
     Min string
@@ -55,6 +57,7 @@ type Variable struct {
     Struct_constraints StructConstraint
     Negative_constraints[] NegConstraint
     Overlap bool
+    Not bool
 }
 type MetaConstraint struct {
     Vars []string // list of variables
@@ -90,6 +93,10 @@ func LoadGrammar(grammar []byte) (error, Grammar) {
 
 func (g Grammar) DumpGrammar() (out []byte, err error) {
     return yaml.Marshal(&g)
+}
+
+func (lvar Variable) HasNotConstraint()  bool {
+    return lvar.Not
 }
 
 func (lvar Variable) HasSizeConstraint()  bool {

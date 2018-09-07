@@ -124,6 +124,21 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
     curVariable := grammar.Models[model].Vars[modelVariable]
     hasUndefined := false
     undefinedVars := make([]string, 0)
+
+    if match.IsModel {
+        _hasModelUndefined, _undefinedModelVars := utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Min, contextVars)
+        if _hasModelUndefined {
+            hasUndefined = true
+            undefinedVars = append(undefinedVars, _undefinedModelVars...)
+        }
+        _hasModelUndefined, _undefinedModelVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Max, contextVars)
+        if _hasModelUndefined {
+            hasUndefined = true
+            undefinedVars = append(undefinedVars, _undefinedModelVars...)
+        }
+    }
+
+
     _hasUndefined, _undefinedVars := utils.HasUndefinedRangeVars(curVariable.Value, contextVars)
     if _hasUndefined {
         hasUndefined = true
@@ -228,7 +243,6 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
 
 // Find a variable in sequence
 func (s SearchUtils) Find(mch chan logol.Match, grammar logol.Grammar, match logol.Match, model string, modelVariable string, contextVars map[string]logol.Match, spacer bool) {
-    // TODO manage different search use cases
 
     curVariable := grammar.Models[model].Vars[modelVariable]
     // Spacer variable, just set spacer var and continue
@@ -344,6 +358,13 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
     if match.Spacer {
         maxStart = seqLen - patternLen + 1
     }
+    if match.Overlap {
+        minStartWithDistance := minStart - (patternLen + maxDistance)
+        if minStartWithDistance > minStart {
+            minStart = minStartWithDistance
+            match.MinPosition = minStart
+        }
+    }
 
     logger.Debugf("seach between %d and %d", minStart, maxStart)
     for i:=minStart; i < maxStart; i++ {
@@ -391,6 +412,7 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
     for _, findResult := range findResults {
         startResult := findResult[0]
         endResult := findResult[1]
+        /*
         if ! spacer {
             if startResult != match.MinPosition {
                 logger.Debugf("skip match at wrong position: %d" , startResult)
@@ -403,7 +425,7 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
                 ban += 1
                 continue
             }
-        }
+        }*/
         newMatch := logol.NewMatch()
         newMatch.Id = modelVariable
         newMatch.Model = model
@@ -412,6 +434,7 @@ func (s SearchUtils) FindApproximate(mch chan logol.Match, grammar logol.Grammar
         newMatch.Info = curVariable.Value
         newMatch.Sub = findResult[2]
         newMatch.Indel = findResult[3]
+        newMatch.Overlap = match.Overlap
         newMatch, err := s.PostControl(newMatch, grammar, contextVars)
         if ! err {
             mch <- newMatch
@@ -470,7 +493,7 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
     if match.Reverse {
         curVariable.Value = bioString.Reverse()
     }
-    // TODO set morphism support in cassiopee
+
     if curVariable.HasMorphism() {
         logger.Debugf("Use morphisms with cassie")
         searchMorph := make(map[string]string)
@@ -516,17 +539,29 @@ func (s SearchUtils) FindCassie(mch chan logol.Match, grammar logol.Grammar, mat
         newMatch.Start = int(elem.GetPos())
         newMatch.Sub = elem.GetSubst()
         newMatch.Indel = elem.GetIn() + elem.GetDel()
+        newMatch.Spacer = true
+        newMatch.Overlap = match.Overlap
         pLen := len(curVariable.Value)
         if(elem.GetIn() - elem.GetDel() != 0) {
             pLen = pLen + elem.GetIn() - elem.GetDel()
         }
         newMatch.End = int(elem.GetPos()) + pLen
         newMatch.Info = curVariable.Value
+
         logger.Debugf("Cassie found %d:%d:%d:%d", newMatch.Start, newMatch.End, newMatch.Sub, newMatch.Indel)
-        if newMatch.Start < match.MinPosition {
-            logger.Debugf("skip match at wrong position: %d" , newMatch.Start)
-            continue
+        matchLen := newMatch.End - newMatch.Start
+        if newMatch.Overlap {
+            if newMatch.Start < match.MinPosition - matchLen {
+                logger.Debugf("skip match at wrong position: %d" , newMatch.Start)
+                continue
+            }
+        } else {
+            if newMatch.Start < match.MinPosition {
+                logger.Debugf("skip match at wrong position: %d" , newMatch.Start)
+                continue
+            }
         }
+
         newMatch, err := s.PostControl(newMatch, grammar, contextVars)
         if ! err {
             mch <- newMatch
@@ -550,8 +585,17 @@ func (s SearchUtils) FindAny(mch chan logol.Match, grammar logol.Grammar, match 
         if spacer {
             maxSearchIndex = seqLen - patternLen
         }
-        logger.Debugf("Loop over %d:%d", match.MinPosition , maxSearchIndex)
+
         minPos := match.MinPosition
+        if match.Overlap {
+            minStartWithDistance := minPos - l
+            if minStartWithDistance > minPos {
+                minPos = minStartWithDistance
+                match.MinPosition = minPos
+            }
+        }
+        logger.Debugf("Loop over %d:%d", minPos , maxSearchIndex)
+
         if minPos < 0 { minPos = 0}
         for i:=match.MinPosition; i < maxSearchIndex; i++ {
             // seqPart := s.SequenceHandler.GetContent(i, i + patternLen)
@@ -561,6 +605,7 @@ func (s SearchUtils) FindAny(mch chan logol.Match, grammar logol.Grammar, match 
             newMatch.Start = i
             newMatch.End = i + patternLen
             newMatch.Info = "*"
+            newMatch.Overlap = match.Overlap
             newMatch, err := s.PostControl(newMatch, grammar, contextVars)
             if ! err {
                 mch <- newMatch
@@ -687,13 +732,18 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
 
     findResults := make([][2]int, 0)
     seqLen := s.SequenceHandler.Sequence.Size
-    //sequence := seq.GetSequence()
-    //seqLen := len(sequence)
     patternLen := len(curVariable.Value)
     minStart := match.MinPosition
     maxStart := match.MinPosition + 1
     if match.Spacer {
         maxStart = seqLen - patternLen + 1
+    }
+    if match.Overlap {
+        minStartWithDistance := minStart - patternLen
+        if minStartWithDistance > minStart {
+            minStart = minStartWithDistance
+            match.MinPosition = minStart
+        }
     }
     // log.Printf("seach between %d and %d", minStart, maxStart)
     for i:=minStart; i < maxStart; i++ {
@@ -718,6 +768,7 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
     for _, findResult := range findResults {
         startResult := findResult[0]
         endResult := findResult[1]
+        /*
         if ! spacer {
             if startResult != match.MinPosition {
                 logger.Debugf("skip match at wrong position: %d" , startResult)
@@ -730,13 +781,14 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
                 ban += 1
                 continue
             }
-        }
+        }*/
         newMatch := logol.NewMatch()
         newMatch.Id = modelVariable
         newMatch.Model = model
         newMatch.Start = startResult
         newMatch.End = endResult
         newMatch.Info = curVariable.Value
+        newMatch.Overlap = match.Overlap
         newMatch, err := s.PostControl(newMatch, grammar, contextVars)
         if ! err {
             mch <- newMatch
@@ -751,11 +803,12 @@ func (s SearchUtils) FindExact(mch chan logol.Match, grammar logol.Grammar, matc
 
 
 func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, contextVars map[string]logol.Match) (newMatch logol.Match, err bool){
-    // TODO
-    // check model global constraints
-    // Check for negative_constraints
     newMatch = match
     logger.Debugf("PostControl checks")
+
+    if match.IsMaxPosExceeded() {
+        return newMatch, true
+    }
 
     curVariable := grammar.Models[match.Model].Vars[match.Id]
     if curVariable.HasStartConstraint(){
@@ -773,6 +826,17 @@ func (s SearchUtils) PostControl(match logol.Match, grammar logol.Grammar, conte
         max, _ := utils.GetRangeValue(maxS, contextVars)
         logger.Debugf("Control end %d:%d", min, max)
         if (min != -1 && match.End < min) || (max != -1 && match.End > max) {
+            return newMatch, true
+        }
+    }
+
+    if curVariable.HasSizeConstraint(){
+        minS, maxS := curVariable.GetSizeConstraint()
+        min, _ := utils.GetRangeValue(minS, contextVars)
+        max, _ := utils.GetRangeValue(maxS, contextVars)
+        logger.Debugf("Control size %d:%d", min, max)
+        curLen := match.End - match.Start
+        if (min != -1 && curLen < min) || (max != -1 && curLen > max) {
             return newMatch, true
         }
     }

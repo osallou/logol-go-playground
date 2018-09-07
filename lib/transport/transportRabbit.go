@@ -21,6 +21,7 @@ type TransportRabbit struct {
     redis *redis.Client
 }
 
+// Get number of pending messages and number of message consumer for the queue
 func (t TransportRabbit) GetQueueStatus(queueId QueueType) (pending int, consumers int) {
     queueName := "analyse"
     switch queueId {
@@ -41,6 +42,7 @@ func (t TransportRabbit) GetId() string {
     return t.id
 }
 
+// Get progress with number of final matches, number of match under analysis and rejected matches
 func(t *TransportRabbit) GetProgress(uid string) (count int, ban int, match int) {
     rcount, _ := t.redis.Get("logol:" + uid + ":count").Result()
     count, _ = strconv.Atoi(rcount)
@@ -51,12 +53,15 @@ func(t *TransportRabbit) GetProgress(uid string) (count int, ban int, match int)
     return count, ban, match
 }
 
+// Reject a match
 func(t *TransportRabbit) AddBan(uid string, nb int64) {
     t.redis.IncrBy("logol:" + uid + ":ban", nb)
 }
+// Increment number of solutions
 func(t *TransportRabbit) AddCount(uid string, nb int64) {
     t.redis.IncrBy("logol:" + uid + ":count", nb)
 }
+// Increment number of successful match
 func(t *TransportRabbit) AddMatch(uid string, nb int64) {
     t.redis.IncrBy("logol:" + uid + ":match", nb)
 }
@@ -69,6 +74,7 @@ func(t *TransportRabbit) SetCount(uid string, nb int64) {
 func(t *TransportRabbit) SetMatch(uid string, nb int64) {
     t.redis.Set("logol:" + uid + ":match", nb, 0)
 }
+// Clear redis info for the run id
 func(t *TransportRabbit) Clear(uid string) {
     t.redis.Del("logol:" + uid + ":count")
     t.redis.Del("logol:" + uid + ":match")
@@ -76,6 +82,7 @@ func(t *TransportRabbit) Clear(uid string) {
     t.redis.Del("logol:" + uid + ":grammar")
 }
 
+// Save grammar in redis
 func(t *TransportRabbit) SetGrammar(grammar []byte, grammarId string) (err bool){
     //logger.Infof("Set grammar %s, %s", grammarFile, grammarId)
     logger.Infof("Set grammar %s", grammarId)
@@ -83,6 +90,7 @@ func(t *TransportRabbit) SetGrammar(grammar []byte, grammarId string) (err bool)
     t.redis.Set("logol:" + grammarId + ":grammar", grammar, 0)
     return true
 }
+// Get grammar from redis
 func(t *TransportRabbit) GetGrammar(grammarId string) (logol.Grammar, bool) {
     logger.Infof("Get grammar %s", grammarId)
     grammar, err := t.redis.Get(grammarId).Result()
@@ -98,16 +106,19 @@ func(t *TransportRabbit) GetGrammar(grammarId string) (logol.Grammar, bool) {
     return g, false
 }
 
+// Cleanup queues
 func (t *TransportRabbit) Close() {
     logger.Infof("Closing transport %s", t.id)
     t.ch.ExchangeDelete("logol-event-exchange-" + t.id, false, false)
     t.ch.QueueDelete("logol-analyse-" + t.id, false, false, false)
     t.ch.QueueDelete("logol-result-" + t.id, false, false, false)
     t.ch.QueueDelete("logol-cassie-" + t.id, false, false, false)
+    t.ch.QueueDelete("logol-log-" + t.id, false, false, false)
     t.ch.Close()
     t.conn.Close()
 }
 
+// Setup queues
 func(transport *TransportRabbit) Init(uid string){
     transport.id = uid
     queueName := transport.id
@@ -129,6 +140,19 @@ func(transport *TransportRabbit) Init(uid string){
     //defer ch.Close()
 
     transport.queues = make(map[int]string)
+
+    qLog, lerr := ch.QueueDeclare(
+      "logol-log-" + queueName, // name
+      false,   // durable
+      false,   // delete when usused
+      false,   // exclusive
+      false,   // no-wait
+      nil,     // arguments
+    )
+
+    failOnError(lerr, "Failed to declare a queue")
+    transport.queues[QUEUE_LOG] = qLog.Name
+
 
     err = ch.ExchangeDeclare(
       "logol-event-exchange-" + queueName, // name
@@ -178,6 +202,7 @@ func(transport *TransportRabbit) Init(uid string){
 
     failOnError(err, "Failed to declare a queue")
 
+
     transport.queues[QUEUE_MESSAGE] = qAnalyse.Name
 
     qCassie, cerr := ch.QueueDeclare(
@@ -213,6 +238,78 @@ func(transport *TransportRabbit) Init(uid string){
       false, // global
     )
     failOnError(err, "Failed to set QoS")
+}
+
+
+func(s *TransportRabbit) ListenLog(fn CallbackLog) {
+    queueListenName, ok := s.queues[QUEUE_LOG]
+    if ! ok {
+        panic(fmt.Sprintf("%s", "Failed to find log queue name"))
+    }
+    logger.Infof("Listen on queue %s", queueListenName)
+    eventQueueName, eok := s.queues[QUEUE_EVENT]
+    if ! eok {
+        panic(fmt.Sprintf("%s", "Failed to find event queue name"))
+    }
+
+    msgs, err := s.ch.Consume(
+      queueListenName, // queue
+      "",     // consumer
+      false,   // auto-ack
+      false,  // exclusive
+      false,  // no-local
+      false,  // no-wait
+      nil,    // args
+    )
+    failOnError(err, "Failed to register a consumer")
+
+    events, err := s.ch.Consume(
+      eventQueueName, // queue
+      "",     // consumer
+      false,   // auto-ack
+      false,  // exclusive
+      false,  // no-local
+      false,  // no-wait
+      nil,    // args
+    )
+
+    failOnError(err, "Failed to register a consumer")
+
+    wg := sync.WaitGroup{}
+    wg.Add(2)
+    forever := make(chan bool)
+    go func() {
+        for d := range msgs {
+            result := string(d.Body[:])
+            fn(result)
+            d.Ack(false)
+        }
+        wg.Done()
+    }()
+
+    go func(ch chan bool) {
+      for d := range events {
+          logger.Infof("New message on %s, %s", queueListenName, string(d.Body[:]))
+          msgEvent := MsgEvent{}
+          json.Unmarshal([]byte(d.Body), &msgEvent)
+          switch msgEvent.Step {
+              case STEP_END:
+                  logger.Infof("Received exit request %s", queueListenName)
+                  d.Ack(false)
+                  wg.Done()
+                  ch <- true
+              default:
+                  d.Ack(false)
+          }
+      }
+    }(forever)
+
+
+    logger.Infof(" [*] Waiting for logs.")
+    <-forever
+    s.ch.Close()
+    s.conn.Close()
+    wg.Wait()
 }
 
 func(s *TransportRabbit) Listen(queueListen QueueType, fn CallbackMessage) {
@@ -302,7 +399,23 @@ func (t TransportRabbit) getMessage(uid string) (result logol.Result, err error)
     return result, err
 }
 
-
+func (t TransportRabbit) SendLog(msg string) bool {
+    queueName, ok := t.queues[QUEUE_LOG]
+    if ! ok {
+        logger.Errorf("Could not find queue %d", QUEUE_LOG)
+        return false
+    }
+    publish_msg := amqp.Publishing{}
+    publish_msg.Body = []byte(msg)
+    t.ch.Publish(
+        "", // exchange
+        queueName, // key
+        false, // mandatory
+        false, // immediate
+        publish_msg,
+    )
+    return true
+}
 func (t TransportRabbit) PrepareMessage(data logol.Result) string {
     u1 := uuid.Must(uuid.NewV4())
 
@@ -384,114 +497,8 @@ func newRedisClient() (client *redis.Client){
 
 func NewTransportRabbit() (*TransportRabbit){
     transport := TransportRabbit{}
-    //transport.id = queueName
 
     transport.redis = newRedisClient()
-
-    /*
-    rabbitConUrl := "amqp://guest:guest@localhost:5672"
-    osRabbitConUrl := os.Getenv("LOGOL_RABBITMQ_ADDR")
-    if osRabbitConUrl != "" {
-        rabbitConUrl = osRabbitConUrl
-    }
-    //connUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/",
-    //    h.User, h.Password, h.Hostname, h.Port)
-    conn, err := amqp.Dial(rabbitConUrl)
-    failOnError(err, "Failed to connect to RabbitMQ")
-    transport.conn = conn
-    //defer conn.Close()
-
-    ch, err := conn.Channel()
-    failOnError(err, "Failed to open a channel")
-    transport.ch = ch
-    //defer ch.Close()
-
-    transport.queues = make(map[int]string)
-
-    err = ch.ExchangeDeclare(
-      "logol-event-exchange-" + queueName, // name
-      "fanout",  // kind
-      false,   // durable
-      false,   // delete when usused
-      false,   // exclusive
-      false,   // no-wait
-      nil,     // arguments
-    )
-
-    failOnError(err, "Failed to declare an exchange")
-
-    eventQueue, err := ch.QueueDeclare(
-        "",
-        false,   // durable
-        false,   // delete when usused
-        true,   // exclusive
-        false,   // no-wait
-        nil,     // arguments
-    )
-
-    failOnError(err, "Failed to declare a queue")
-
-    err = ch.QueueBind(
-        eventQueue.Name, // name,
-        "", // key
-        "logol-event-exchange-" + queueName,  // exchange
-        false, // no-wait
-        nil, // arguments
-    )
-
-    failOnError(err, "Failed to bind queue")
-
-    transport.queues[QUEUE_EVENT] = eventQueue.Name
-    transport.queues[EXCHANGE_EVENT] = "logol-event-exchange-" + queueName
-
-
-    qAnalyse, err := ch.QueueDeclare(
-      "logol-analyse-" + queueName, // name
-      false,   // durable
-      false,   // delete when usused
-      false,   // exclusive
-      false,   // no-wait
-      nil,     // arguments
-    )
-
-    failOnError(err, "Failed to declare a queue")
-
-    transport.queues[QUEUE_MESSAGE] = qAnalyse.Name
-
-    qCassie, cerr := ch.QueueDeclare(
-      "logol-cassie-" + queueName, // name
-      false,   // durable
-      false,   // delete when usused
-      false,   // exclusive
-      false,   // no-wait
-      nil,     // arguments
-    )
-
-    failOnError(cerr, "Failed to declare a queue")
-
-    transport.queues[QUEUE_CASSIE] = qCassie.Name
-
-
-    qResult, rqerr := ch.QueueDeclare(
-      "logol-result-" + queueName, // name
-      false,   // durable
-      false,   // delete when usused
-      false,   // exclusive
-      false,   // no-wait
-      nil,     // arguments
-    )
-
-    failOnError(rqerr, "Failed to declare a queue")
-
-    transport.queues[QUEUE_RESULT] = qResult.Name
-
-    err = ch.Qos(
-      1,     // prefetch count
-      0,     // prefetch size
-      false, // global
-    )
-    failOnError(err, "Failed to set QoS")
-    */
 
     return &transport
 }

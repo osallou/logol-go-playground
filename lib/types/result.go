@@ -9,6 +9,12 @@ type Event struct {
     Step int
 }
 
+type From struct {
+    Model string
+    Variable string
+    Uid string
+}
+
 type Result struct {
     Outfile string
     SequenceFile string
@@ -17,11 +23,12 @@ type Result struct {
     MsgTo string
     Model string
     ModelVariable string
-    From []string
+    From []From
     Matches []Match
     PrevMatches [][]Match // store previous main model matches when using serial models
     ContextVars []map[string]Match
     Spacer bool
+    Overlap bool
     Context [][]Match
     Step int
     Position int
@@ -32,7 +39,7 @@ type Result struct {
 
 func NewResult() Result {
     result := Result{}
-    result.From = make([]string, 0)
+    result.From = make([]From, 0)
     result.Matches = make([]Match, 0)
     result.PrevMatches = make([][]Match, 0)
     result.ContextVars = make([]map[string]Match, 0)
@@ -127,7 +134,6 @@ func findMatchSurroundingPositions(uid string, matches []Match, position matchPo
     return position
 }
 func (r Result) FindSurroundingPositions(uid string) (min_pos int, pre_spacer bool, max_pos int, post_spacer bool){
-    // TODO
     logger.Debugf("FindSurroundingPositions:%s", uid)
     mpos := matchPosition{}
     mpos.MinPos = -1

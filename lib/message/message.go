@@ -21,7 +21,7 @@ import (
 var logger = logs.GetLogger("logol.message")
 
 type MessageManager interface {
-    Init(uit string, rch chan [][]logol.Match) // chan will work for results only, others will close chan at init
+    Init(uid string, rch chan [][]logol.Match) // chan will work for results only, others will close chan at init
     Close()
     HandleMessage(logol.Result) bool
     Listen(queueListen transport.QueueType, fn transport.CallbackMessage)
@@ -37,6 +37,7 @@ type MessageResult struct {
     uid string
     rch chan [][]logol.Match
 }
+
 func (m *MessageResult) Init(uid string, rch chan [][]logol.Match) {
     logger.Infof("init result %s", uid)
     m.nbMatches = 0
@@ -204,9 +205,8 @@ func (m *MessageAnalyse) HandleMessage(result logol.Result) (ok bool) {
     }
 
     logger.Debugf("Received message: %s", result.MsgTo)
-    // TODO to remove, for debug only
-    json_msg, _ := json.Marshal(result)
-    logger.Debugf("#DEBUG# %s", json_msg)
+    //json_msg, _ := json.Marshal(result)
+    //logger.Debugf("#DEBUG# %s", json_msg)
     now := time.Now()
     start_time := now.UnixNano()
     now = time.Now()
