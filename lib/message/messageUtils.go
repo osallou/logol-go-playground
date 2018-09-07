@@ -64,6 +64,14 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
     nextVars := m.Grammar.Models[model].Vars[modelVariable].Next
     if len(nextVars) == 0 {
         logger.Debugf("No next var")
+        logger.Debugf("First check meta constraints")
+        for _, meta := range m.Grammar.Models[model].Meta {
+            isMetaOk := utils.Evaluate(meta, data.ContextVars[len(data.ContextVars)-1])
+            if ! isMetaOk {
+                m.Transport.AddBan(data.Uid, 1)
+                return
+            }
+        }        
         if len(data.From) > 0 {
             lastFrom := data.From[len(data.From) - 1]
             /*

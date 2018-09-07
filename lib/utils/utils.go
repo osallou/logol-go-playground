@@ -23,6 +23,33 @@ const PROP_END = 1
 const PROP_SUBST = 2
 const PROP_INDEL = 3
 const PROP_CONTENT = 4
+const PROP_SIZE = 5
+
+
+
+// Find all vars name from an expression
+//
+// Example: @R1 + @@R2 + 3 will return R1,R2
+func GetVarNamesFromExpression(expr string) []string {
+    result := make([]string, 0)
+    varRefs := GetVarReferencesFromExpression(expr)
+    for _, ref := range varRefs {
+        _, varName, err := getProperty(ref)
+        if ! err {
+            result = append(result, varName)
+        }
+    }
+    return result
+}
+
+// Find all vars reference from an expression
+//
+// Example: @R1 + @@R2 + 3 will return @R1,@@R2
+func GetVarReferencesFromExpression(expr string) []string {
+    re := regexp.MustCompile("[$@#]+\\w+")
+    res := re.FindAllString(expr, -1)
+    return res
+}
 
 func Evaluate(expr string, contextVars map[string]logol.Match) bool {
     logger.Debugf("Evaluate expression: %s", expr)
@@ -40,6 +67,7 @@ func Evaluate(expr string, contextVars map[string]logol.Match) bool {
         varIndex+=1
         cValue, cerr := getValueFromExpression(val, contextVars)
         if cerr {
+            logger.Debugf("Failed to get value from expression %s", val)
             return false
         }
         parameters[varName] = cValue
@@ -74,6 +102,8 @@ func getPropertyValueFromContext(property int, variable string, contextVars map[
             return ctxVar.Sub, false
         case PROP_INDEL:
             return ctxVar.Indel, false
+        case PROP_SIZE:
+            return ctxVar.End - ctxVar.Start, false
     }
     return 0, false
 }
@@ -94,6 +124,9 @@ func getProperty(expr string) (prop int, variable string, err bool) {
     }
     if exprLen > 1 && expr[0:1] == "?" {
         return PROP_CONTENT, expr[1:len(expr)], false
+    }
+    if exprLen > 1 && expr[0:1] == "#" {
+        return PROP_SIZE, expr[1:len(expr)], false
     }
     return  0, "", true
 }
