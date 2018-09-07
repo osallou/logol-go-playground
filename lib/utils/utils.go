@@ -87,6 +87,7 @@ func Evaluate(expr string, contextVars map[string]logol.Match) bool {
     }
 }
 
+// Search variable in context variables and returns value matching selected property (start, end, cost, ...)
 func getPropertyValueFromContext(property int, variable string, contextVars map[string]logol.Match) (res int, err bool) {
     ctxVar, ok := contextVars[variable]
     if ! ok {
@@ -108,6 +109,9 @@ func getPropertyValueFromContext(property int, variable string, contextVars map[
     return 0, false
 }
 
+// Search which property of a variable is expected
+//
+// Example: @@VAR1 means *end* position of VAR1
 func getProperty(expr string) (prop int, variable string, err bool) {
     exprLen := len(expr)
     if exprLen > 2 && expr[0:2] == "@@" {
@@ -147,7 +151,9 @@ func getValueFromExpression(expr string, contextVars map[string]logol.Match) (va
     return getPropertyValueFromContext(prop, variable, contextVars)
 }
 
-
+// Search if variable constraints refer to a variable not available in context variables
+//
+// If some variables not yet defined are found, returns list of variable names and value true, else return false
 func HasUndefineContentVar(variable string, contextVars map[string]logol.Match) (hasUndefined bool, undefinedVars []string) {
     if variable == "" {
         return false, undefinedVars
@@ -249,6 +255,10 @@ func GetRangeValue(expr string, contextVars map[string]logol.Match) (val int, er
     return 0, false
 }
 
+// Check the percentage of alphabet in input sequence against input percent
+//
+// alphabet is a string of chars to be found in sequence. Function counts them vs number of characters in sequence.
+// It then compares the found percentage against input percent expecting a higher value
 func CheckAlphabetPercent(seqPart string, alphabet string, percent int) (bool, int) {
     nbMatch := 0
     seqPartLen := len(seqPart)
