@@ -59,15 +59,11 @@ type Variable struct {
     Overlap bool
     Not bool
 }
-type MetaConstraint struct {
-    Vars []string // list of variables
-    String_constraints []StringConstraint
-    Struct_constraints []StructConstraint
-}
+
 type Model struct {
     Comment string
     Param []string
-    Meta []MetaConstraint
+    Meta []string
     Start[] string
     Vars map[string]Variable
 }

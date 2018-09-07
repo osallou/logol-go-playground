@@ -2,8 +2,10 @@ package logol
 
 import (
     //"log"
+    "regexp"
     "strconv"
     "strings"
+    "github.com/Knetic/govaluate"
     logol "org.irisa.genouest/logol/lib/types"
     logs "org.irisa.genouest/logol/lib/log"
 )
@@ -21,6 +23,41 @@ const PROP_END = 1
 const PROP_SUBST = 2
 const PROP_INDEL = 3
 const PROP_CONTENT = 4
+
+func Evaluate(expr string, contextVars map[string]logol.Match) bool {
+    logger.Debugf("Evaluate expression: %s", expr)
+
+    re := regexp.MustCompile("[$@#]+\\w+")
+    res := re.FindAllString(expr, -1)
+
+    parameters := make(map[string]interface{}, 8)
+    varIndex := 0
+    for _, val := range res {
+        t := strconv.Itoa(varIndex)
+        varName := "VAR" + t
+        r := strings.NewReplacer(val, varName)
+        expr = r.Replace(expr)
+        varIndex+=1
+        cValue, cerr := getValueFromExpression(val, contextVars)
+        if cerr {
+            return false
+        }
+        parameters[varName] = cValue
+    }
+    logger.Debugf("New expr: %s with params %v", expr, parameters)
+
+    expression, err := govaluate.NewEvaluableExpression(expr);
+    if err != nil {
+        logger.Errorf("Failed to evaluate expression %s", expr)
+        return false
+    }
+	result, _ := expression.Evaluate(parameters);
+    if result == true {
+        return true
+    }else {
+        return false
+    }
+}
 
 func getPropertyValueFromContext(property int, variable string, contextVars map[string]logol.Match) (res int, err bool) {
     ctxVar, ok := contextVars[variable]
