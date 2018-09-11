@@ -184,7 +184,7 @@ func main() {
     stats := t.GetStats(data.Uid)
     json_stats, _ := json.Marshal(stats)
     log.Printf("Stats: %s", json_stats)
-    utils.WriteFlowPlots(data.Uid,stats.Flow)
+    utils.WriteFlowPlots(data.Uid,stats.Flow, stats.Duration)
 
     t.Close()
     t.Clear(data.Uid)

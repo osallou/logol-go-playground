@@ -282,13 +282,18 @@ func CheckAlphabetPercent(seqPart string, alphabet string, percent int) (bool, i
 }
 
 
-func WriteFlowPlots(uid string, flow map[string]string) {
+func WriteFlowPlots(uid string, flow map[string]string, duration map[string]string) {
+    // TODO add duration in node label
     f, err := os.Create("logol-" + uid + ".stats.dot")
     if err != nil {
         return
     }
     defer f.Close()
     f.WriteString("digraph g {\n")
+    for k, v := range duration {
+        elts := strings.Split(k, ".")
+        f.WriteString("    " + elts[0] + "_" + elts[1] + "[label=\"" + k +" - " + v + "\"]\n")
+    }
     for k, v := range flow {
         elts := strings.Split(k, ".")
         f.WriteString("    " + elts[0] + "_" + elts[1] + " -> " + elts[2] + "_" + elts[3] + " [label=" + v + "]\n")

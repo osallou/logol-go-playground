@@ -42,4 +42,10 @@ then logolClient
 
 testmsg will send grammar and sequence info , once search is over it will stop processes
 
+
+# stats
+
 to enable stats , LOGOL_STATS env variable should be set on processes (impacts performance)
+
+a *dot* file will be generated to represent the graph of search
+
