@@ -124,26 +124,30 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
     curVariable := grammar.Models[model].Vars[modelVariable]
     hasUndefined := false
     undefinedVars := make([]string, 0)
+    knownVars := make([]string, 0)
 
     if match.IsModel {
-        _hasModelUndefined, _undefinedModelVars := utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Min, contextVars)
+        _hasModelUndefined, _undefinedModelVars, _knownVars := utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Min, contextVars)
         if _hasModelUndefined {
             hasUndefined = true
             undefinedVars = append(undefinedVars, _undefinedModelVars...)
         }
-        _hasModelUndefined, _undefinedModelVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Max, contextVars)
+        knownVars = append(knownVars, _knownVars...)
+        _hasModelUndefined, _undefinedModelVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Max, contextVars)
         if _hasModelUndefined {
             hasUndefined = true
             undefinedVars = append(undefinedVars, _undefinedModelVars...)
         }
+        knownVars = append(knownVars, _knownVars...)
     }
 
 
-    _hasUndefined, _undefinedVars := utils.HasUndefinedRangeVars(curVariable.Value, contextVars)
+    _hasUndefined, _undefinedVars, _knownVars := utils.HasUndefinedRangeVars(curVariable.Value, contextVars)
     if _hasUndefined {
         hasUndefined = true
         undefinedVars = append(undefinedVars, _undefinedVars...)
     }
+    knownVars = append(knownVars, _knownVars...)
     /*
     _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Content, contextVars)
     logger.Debugf("Test content constraint %t ", _hasUndefined)
@@ -151,68 +155,93 @@ func (s SearchUtils) CanFind(grammar logol.Grammar, match *logol.Match, model st
         hasUndefined = true
         undefinedVars = append(undefinedVars, _undefinedVars...)
     }*/
-    _hasUndefined, _undefinedVars = utils.HasUndefineContentVar(curVariable.String_constraints.Content, contextVars)
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefineContentVar(curVariable.String_constraints.Content, contextVars)
     if _hasUndefined {
         hasUndefined = true
         undefinedVars = append(undefinedVars, _undefinedVars...)
     }
+    knownVars = append(knownVars, _knownVars...)
 
 
-    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Min, contextVars)
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Min, contextVars)
     if _hasUndefined {
         hasUndefined = true
         undefinedVars = append(undefinedVars, _undefinedVars...)
     }
-    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Max, contextVars)
-    if _hasUndefined {
-        hasUndefined = true
-        undefinedVars = append(undefinedVars, _undefinedVars...)
-    }
-    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Start.Min, contextVars)
-    if _hasUndefined {
-        hasUndefined = true
-        undefinedVars = append(undefinedVars, _undefinedVars...)
-    }
-    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Start.Max, contextVars)
-    if _hasUndefined {
-        hasUndefined = true
-        undefinedVars = append(undefinedVars, _undefinedVars...)
-    }
-    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.End.Min, contextVars)
-    if _hasUndefined {
-        hasUndefined = true
-        undefinedVars = append(undefinedVars, _undefinedVars...)
-    }
-    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.End.Max, contextVars)
-    if _hasUndefined {
-        hasUndefined = true
-        undefinedVars = append(undefinedVars, _undefinedVars...)
-    }
+    knownVars = append(knownVars, _knownVars...)
 
-    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Cost.Min, contextVars)
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Size.Max, contextVars)
     if _hasUndefined {
         hasUndefined = true
         undefinedVars = append(undefinedVars, _undefinedVars...)
     }
-    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Cost.Max, contextVars)
+    knownVars = append(knownVars, _knownVars...)
+
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Start.Min, contextVars)
     if _hasUndefined {
         hasUndefined = true
         undefinedVars = append(undefinedVars, _undefinedVars...)
     }
-    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Distance.Min, contextVars)
+    knownVars = append(knownVars, _knownVars...)
+
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.Start.Max, contextVars)
     if _hasUndefined {
         hasUndefined = true
         undefinedVars = append(undefinedVars, _undefinedVars...)
     }
-    _hasUndefined, _undefinedVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Distance.Max, contextVars)
+    knownVars = append(knownVars, _knownVars...)
+
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.End.Min, contextVars)
     if _hasUndefined {
         hasUndefined = true
         undefinedVars = append(undefinedVars, _undefinedVars...)
     }
+    knownVars = append(knownVars, _knownVars...)
+
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.String_constraints.End.Max, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    knownVars = append(knownVars, _knownVars...)
+
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Cost.Min, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    knownVars = append(knownVars, _knownVars...)
+
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Cost.Max, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    knownVars = append(knownVars, _knownVars...)
+
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Distance.Min, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    knownVars = append(knownVars, _knownVars...)
+
+    _hasUndefined, _undefinedVars, _knownVars = utils.HasUndefinedRangeVars(curVariable.Struct_constraints.Distance.Max, contextVars)
+    if _hasUndefined {
+        hasUndefined = true
+        undefinedVars = append(undefinedVars, _undefinedVars...)
+    }
+    knownVars = append(knownVars, _knownVars...)
 
     undefinedVars = uniques(undefinedVars)
 
     nbUndefinedVars := len(undefinedVars)
+    if hasUndefined {
+        for _, k := range knownVars {
+            kvar, _ := contextVars[k]
+            match.YetToBeDefined = append(match.YetToBeDefined, kvar.Uid)
+        }
+    }
     logger.Debugf("Depends on undefined variables %s.%s %d", model, modelVariable, nbUndefinedVars)
     for i:=0;i<nbUndefinedVars;i++ {
             contentConstraint := undefinedVars[i]

@@ -156,12 +156,13 @@ func getValueFromExpression(expr string, contextVars map[string]logol.Match) (va
 // Search if variable constraints refer to a variable not available in context variables
 //
 // If some variables not yet defined are found, returns list of variable names and value true, else return false
-func HasUndefineContentVar(variable string, contextVars map[string]logol.Match) (hasUndefined bool, undefinedVars []string) {
+func HasUndefineContentVar(variable string, contextVars map[string]logol.Match) (hasUndefined bool, undefinedVars []string, knownVars []string) {
     if variable == "" {
-        return false, undefinedVars
+        return false, undefinedVars, knownVars
     }
     hasUndefined = false
     undefinedVars = make([]string, 0)
+    knownVars = make([]string, 0)
     if contextVars == nil {
         hasUndefined = true
         undefinedVars = append(undefinedVars, variable)
@@ -170,21 +171,25 @@ func HasUndefineContentVar(variable string, contextVars map[string]logol.Match) 
     if ! ok || ctxVar.Start == -1 || ctxVar.End == -1 {
         hasUndefined = true
         undefinedVars = append(undefinedVars, variable)
+    } else {
+        knownVars = append(knownVars, variable)
     }
 
-    return hasUndefined, undefinedVars
+    return hasUndefined, undefinedVars, knownVars
 }
 
 // check if an operation contains unknown or not defined variables
-func HasUndefinedRangeVars(expr string, contextVars map[string]logol.Match) (hasUndefined bool, undefinedVars []string) {
-    if expr == "" {
-        return false, undefinedVars
-    }
-    if expr == "_" {
-        return false, undefinedVars
-    }
+func HasUndefinedRangeVars(expr string, contextVars map[string]logol.Match) (hasUndefined bool, undefinedVars []string, knownVars []string) {
     hasUndefined = false
     undefinedVars = make([]string, 0)
+    knownVars = make([]string, 0)
+    if expr == "" {
+        return false, undefinedVars, knownVars
+    }
+    if expr == "_" {
+        return false, undefinedVars, knownVars
+    }
+
     elts := strings.Split(expr, " ")
 
     testProp := func (elt string) (bool, string){
@@ -198,13 +203,17 @@ func HasUndefinedRangeVars(expr string, contextVars map[string]logol.Match) (has
                 return true, variable
             }
         }
-        return false, ""
+        return false, variable
     }
-
+    logger.Errorf("testing expr %s", expr)
     undef, undefVar := testProp(elts[0])
     if undef {
         hasUndefined = true
         undefinedVars = append(undefinedVars, undefVar)
+    } else {
+        if undefVar != "" {
+            knownVars = append(knownVars, undefVar)
+        }
     }
 
     if len(elts) > 1 {
@@ -212,10 +221,14 @@ func HasUndefinedRangeVars(expr string, contextVars map[string]logol.Match) (has
         if undef {
             hasUndefined = true
             undefinedVars = append(undefinedVars, undefVar)
+        } else {
+            if undefVar != "" {
+                knownVars = append(knownVars, undefVar)
+            }
         }
     }
 
-    return hasUndefined, undefinedVars
+    return hasUndefined, undefinedVars, knownVars
 }
 // Calculate expression
 //

@@ -53,9 +53,9 @@ func TestPercentMatch(t *testing.T) {
 func TestUndefinedVars(t *testing.T) {
     contextVars := make(map[string]logol.Match)
     //contextVars["R1"] = logol.NewMatch()
-    hasUndefined, undefinedVars := HasUndefinedRangeVars("12", contextVars)
-    if hasUndefined {
-        t.Errorf("Invalid, %t: %s", hasUndefined, undefinedVars)
+    hasUndefined, undefinedVars, knownVars := HasUndefinedRangeVars("12", contextVars)
+    if hasUndefined || len(knownVars) > 0 {
+        t.Errorf("Invalid, %t: %s, %s, %d", hasUndefined, undefinedVars, knownVars, len(knownVars))
     }
 
     m1 := logol.NewMatch()
@@ -68,19 +68,19 @@ func TestUndefinedVars(t *testing.T) {
     m2.Start = 1
     m2.End = 2
     contextVars["R2"] = m2
-    hasUndefined, undefinedVars = HasUndefinedRangeVars("@@R1", contextVars)
-    if hasUndefined {
-        t.Errorf("Invalid, %t: %s", hasUndefined, undefinedVars)
+    hasUndefined, undefinedVars, knownVars = HasUndefinedRangeVars("@@R1", contextVars)
+    if hasUndefined || len(knownVars) != 1 {
+        t.Errorf("Invalid, %t: %s, %s", hasUndefined, undefinedVars, knownVars)
     }
-    hasUndefined, undefinedVars = HasUndefinedRangeVars("@@R3", contextVars)
+    hasUndefined, undefinedVars, _ = HasUndefinedRangeVars("@@R3", contextVars)
     if ! hasUndefined {
         t.Errorf("Invalid, %t: %s", hasUndefined, undefinedVars)
     }
-    hasUndefined, undefinedVars = HasUndefinedRangeVars("@R1 + @R2", contextVars)
+    hasUndefined, undefinedVars, _ = HasUndefinedRangeVars("@R1 + @R2", contextVars)
     if hasUndefined {
         t.Errorf("Invalid, %t: %s", hasUndefined, undefinedVars)
     }
-    hasUndefined, undefinedVars = HasUndefinedRangeVars("@R1 + @R3", contextVars)
+    hasUndefined, undefinedVars, _ = HasUndefinedRangeVars("@R1 + @R3", contextVars)
     if ! hasUndefined {
         t.Errorf("Invalid, %t: %s", hasUndefined, undefinedVars)
     }else {
@@ -88,11 +88,11 @@ func TestUndefinedVars(t *testing.T) {
             t.Errorf("Invalid, %t: %s", hasUndefined, undefinedVars)
         }
     }
-    hasUndefined, undefinedVars = HasUndefinedRangeVars("?R1", contextVars)
+    hasUndefined, undefinedVars, _ = HasUndefinedRangeVars("?R1", contextVars)
     if hasUndefined {
         t.Errorf("Invalid, %t: %s", hasUndefined, undefinedVars)
     }
-    hasUndefined, undefinedVars = HasUndefinedRangeVars("?R3", contextVars)
+    hasUndefined, undefinedVars, _ = HasUndefinedRangeVars("?R3", contextVars)
     if ! hasUndefined {
         t.Errorf("Invalid, %t: %s", hasUndefined, undefinedVars)
     }
