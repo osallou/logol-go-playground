@@ -6,8 +6,8 @@ import (
     "os"
     "strconv"
     "sync"
-    logol "org.irisa.genouest/logol/lib/types"
-    logs "org.irisa.genouest/logol/lib/log"
+    logol "github.com/osallou/logol-go-playground/lib/types"
+    logs "github.com/osallou/logol-go-playground/lib/log"
 )
 
 var logger = logs.GetLogger("logol.transport")
@@ -155,4 +155,7 @@ type Transport interface {
     ListenLog(fn CallbackLog)
     GetGrammar(grammarId string) (g logol.Grammar, err bool)
     SetGrammar(grammar []byte, grammarId string) (err bool)
+    IncrFlowStat(uid string, from string, to string)
+    IncrDurationStat(uid string, variable string, duration int64)
+    GetStats(uid string) Stats
 }

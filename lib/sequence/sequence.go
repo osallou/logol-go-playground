@@ -9,7 +9,7 @@ import (
     "strings"
     lru "github.com/hashicorp/golang-lru"
     cassie "github.com/osallou/cassiopee-go"
-    logol "org.irisa.genouest/logol/lib/types"
+    logol "github.com/osallou/logol-go-playground/lib/types"
 )
 
 var once sync.Once

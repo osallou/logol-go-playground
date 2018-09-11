@@ -6,8 +6,8 @@ package main
 import (
         "log"
         //"os"
-        message "org.irisa.genouest/logol/lib/message"
-        transport "org.irisa.genouest/logol/lib/transport"
+        message "github.com/osallou/logol-go-playground/lib/message"
+        transport "github.com/osallou/logol-go-playground/lib/transport"
         "github.com/namsral/flag"
 )
 

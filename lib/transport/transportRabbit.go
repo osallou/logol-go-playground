@@ -9,9 +9,11 @@ import (
     "sync"
     "github.com/streadway/amqp"
     "github.com/satori/go.uuid"
-    logol "org.irisa.genouest/logol/lib/types"
+    logol "github.com/osallou/logol-go-playground/lib/types"
     redis "github.com/go-redis/redis"
 )
+
+var doStats bool
 
 type TransportRabbit struct {
     id string
@@ -80,6 +82,8 @@ func(t *TransportRabbit) Clear(uid string) {
     t.redis.Del("logol:" + uid + ":match")
     t.redis.Del("logol:" + uid + ":ban")
     t.redis.Del("logol:" + uid + ":grammar")
+    t.redis.Del("logol:" + uid + ":stat:duration")
+    t.redis.Del("logol:" + uid + ":stat:flow")
 }
 
 // Save grammar in redis
@@ -120,6 +124,11 @@ func (t *TransportRabbit) Close() {
 
 // Setup queues
 func(transport *TransportRabbit) Init(uid string){
+    doStatsEnv := os.Getenv("LOGOL_STATS")
+    if doStatsEnv != "" {
+        doStats = true
+        logger.Infof("Activating usage statistics, this can impact performance")
+    }
     transport.id = uid
     queueName := transport.id
     rabbitConUrl := "amqp://guest:guest@localhost:5672"
@@ -474,6 +483,42 @@ func (s TransportRabbit) SendMessage(queue QueueType, data logol.Result) bool {
         s.PublishMessage(queueName, publish_msg)
     }
     return true
+}
+
+func (t TransportRabbit) IncrFlowStat(uid string, from string, to string) {
+    if ! doStats || from == "." || to == "over.over" {
+        return
+    }
+    err := t.redis.HIncrBy("logol:" + uid + ":stat:flow", from + "." + to, 1).Err()
+    if err != nil{
+        logger.Errorf("Failed to update stats")
+    }
+}
+func (t TransportRabbit) IncrDurationStat(uid string, variable string, duration int64) {
+    if ! doStats {
+        return
+    }
+    err := t.redis.HIncrBy("logol:" + uid + ":stat:duration", variable, duration).Err()
+    if err != nil{
+        logger.Errorf("Failed to update stats")
+    }
+}
+
+type Stats struct {
+    Duration map[string]string
+    Flow map[string]string
+}
+func (t TransportRabbit) GetStats(uid string) Stats {
+    statDuration, errD := t.redis.HGetAll("logol:" + uid + ":stat:duration").Result()
+    statFlow, errF := t.redis.HGetAll("logol:" + uid + ":stat:flow").Result()
+    stats := Stats{}
+    if errD == nil {
+        stats.Duration = statDuration
+    }
+    if errF == nil {
+        stats.Flow = statFlow
+    }
+    return stats
 }
 
 

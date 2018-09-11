@@ -3,7 +3,7 @@ package logol
 
 import (
         "testing"
-        logol "org.irisa.genouest/logol/lib/types"
+        logol "github.com/osallou/logol-go-playground/lib/types"
         //"log"
 )
 

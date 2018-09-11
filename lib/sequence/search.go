@@ -7,10 +7,10 @@ import (
     //"log"
     "github.com/satori/go.uuid"
     //"strconv"
-    logol "org.irisa.genouest/logol/lib/types"
+    logol "github.com/osallou/logol-go-playground/lib/types"
     cassie "github.com/osallou/cassiopee-go"
-    utils "org.irisa.genouest/logol/lib/utils"
-    logs "org.irisa.genouest/logol/lib/log"
+    utils "github.com/osallou/logol-go-playground/lib/utils"
+    logs "github.com/osallou/logol-go-playground/lib/log"
 )
 
 var logger = logs.GetLogger("logol.sequence")

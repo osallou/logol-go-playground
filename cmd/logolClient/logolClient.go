@@ -3,9 +3,9 @@
 package main
 
 import (
-        //"fmt"
+        "fmt"
         "log"
-        //"encoding/json"
+        "encoding/json"
         "io/ioutil"
         "os"
         "os/signal"
@@ -17,11 +17,12 @@ import (
         //redis "github.com/go-redis/redis"
         "gopkg.in/yaml.v2"
         "github.com/satori/go.uuid"
-        logol "org.irisa.genouest/logol/lib/types"
-        message "org.irisa.genouest/logol/lib/message"
-        transport "org.irisa.genouest/logol/lib/transport"
+        logol "github.com/osallou/logol-go-playground/lib/types"
+        message "github.com/osallou/logol-go-playground/lib/message"
+        transport "github.com/osallou/logol-go-playground/lib/transport"
         // msg "org.irisa.genouest/logol/lib/message"
-        logs "org.irisa.genouest/logol/lib/log"
+        logs "github.com/osallou/logol-go-playground/lib/log"
+        utils "github.com/osallou/logol-go-playground/lib/utils"
         "github.com/namsral/flag"
 )
 
@@ -35,6 +36,7 @@ func main() {
     var sequenceFile string
     var uid string
     var outfile string
+    var version bool
 
     flag.Int64Var(&maxpatternlen, "maxpatternlen", 1000, "Maximum size of patterns to search")
     flag.Int64Var(&mode, "mode", 0, "Mode: 0=DNA, 1=RNA, 2=Protei")
@@ -43,9 +45,15 @@ func main() {
     flag.StringVar(&uid, "uid", "run", "Unique identifier (will create result file logol.*uid*.out)")
     flag.StringVar(&sequenceFile, "sequence", "", "Sequence file path")
     flag.StringVar(&outfile, "out", "", "Output file path")
+    flag.BoolVar(&version,"version", false, "Get version info")
     flag.Parse()
     logger.Infof("option maxpatternlen: %d", maxpatternlen)
     logger.Infof("option mode: %d", mode)
+
+    if version {
+        fmt.Printf("Version: %s\nBuild: %s\nGit commit: %s\n", utils.Version, utils.Buildstamp, utils.Githash)
+        return
+    }
 
     if _, err := os.Stat(grammarFile); os.IsNotExist(err) {
           log.Fatalf("Grammar file %s does not exist", grammarFile)
@@ -173,6 +181,10 @@ func main() {
         time.Sleep(2000 * time.Millisecond)
     }
 
+    stats := t.GetStats(data.Uid)
+    json_stats, _ := json.Marshal(stats)
+    log.Printf("Stats: %s", json_stats)
+    utils.WriteFlowPlots(data.Uid,stats.Flow)
 
     t.Close()
     t.Clear(data.Uid)

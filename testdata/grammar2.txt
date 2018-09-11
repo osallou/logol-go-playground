@@ -10,20 +10,22 @@ models:
      - var1
    vars:
      var1:
-         value: 'aaaaaa'
+         value: 'cc'
          next:
            - var2
      var2:
          value: null
          string_constraints:
-            size:
-                min: 4
-                max: 5
-         negative_constraints:
-           - value: "cgtt"
+           content: 'R1'
+         next:
+           - var3
+     var3:
+         value: 'aaa'
+         string_constraints:
+            saveas: 'R1'
          next: null
 run:
  - model: mod1
    param: []
 
-sequence: /home/osallou/Development/NOSAVE/gopath/src/org.irisa.genouest/logol/sequence.txt
+sequence: /home/osallou/Development/NOSAVE/gopath/src/github.com/osallou/logol-go-playground/sequence.txt

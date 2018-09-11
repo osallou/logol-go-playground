@@ -28,4 +28,4 @@ models:
 run:
  - model: mod1
 
-sequence: /home/osallou/Development/NOSAVE/gopath/src/org.irisa.genouest/logol/sequence.txt
+sequence: /home/osallou/Development/NOSAVE/gopath/src/github.com/osallou/logol-go-playground/sequence.txt

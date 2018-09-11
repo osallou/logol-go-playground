@@ -5,7 +5,7 @@ import (
         "strings"
         "strconv"
         "log"
-        logs "org.irisa.genouest/logol/lib/log"
+        logs "github.com/osallou/logol-go-playground/lib/log"
 )
 
 var logger = logs.GetLogger("logol.types")

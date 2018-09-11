@@ -2,12 +2,14 @@ package logol
 
 import (
     //"log"
+    //"io/ioutil"
+    "os"
     "regexp"
     "strconv"
     "strings"
     "github.com/Knetic/govaluate"
-    logol "org.irisa.genouest/logol/lib/types"
-    logs "org.irisa.genouest/logol/lib/log"
+    logol "github.com/osallou/logol-go-playground/lib/types"
+    logs "github.com/osallou/logol-go-playground/lib/log"
 )
 
 var logger = logs.GetLogger("logol.sequence.utils")
@@ -277,4 +279,19 @@ func CheckAlphabetPercent(seqPart string, alphabet string, percent int) (bool, i
         return true, percentMatch
     }
     return false, percentMatch
+}
+
+
+func WriteFlowPlots(uid string, flow map[string]string) {
+    f, err := os.Create("logol-" + uid + ".stats.dot")
+    if err != nil {
+        return
+    }
+    defer f.Close()
+    f.WriteString("digraph g {\n")
+    for k, v := range flow {
+        elts := strings.Split(k, ".")
+        f.WriteString("    " + elts[0] + "_" + elts[1] + " -> " + elts[2] + "_" + elts[3] + " [label=" + v + "]\n")
+    }
+    f.WriteString("}\n")
 }

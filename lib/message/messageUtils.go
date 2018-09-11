@@ -9,10 +9,10 @@ import (
     "sort"
     "strconv"
     //"strings"
-    logol "org.irisa.genouest/logol/lib/types"
-    seq "org.irisa.genouest/logol/lib/sequence"
-    transport "org.irisa.genouest/logol/lib/transport"
-    utils "org.irisa.genouest/logol/lib/utils"
+    logol "github.com/osallou/logol-go-playground/lib/types"
+    seq "github.com/osallou/logol-go-playground/lib/sequence"
+    transport "github.com/osallou/logol-go-playground/lib/transport"
+    utils "github.com/osallou/logol-go-playground/lib/utils"
     //redis "github.com/go-redis/redis"
     //"github.com/streadway/amqp"
     "github.com/satori/go.uuid"
@@ -71,7 +71,7 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                 m.Transport.AddBan(data.Uid, 1)
                 return
             }
-        }        
+        }
         if len(data.From) > 0 {
             lastFrom := data.From[len(data.From) - 1]
             /*
@@ -184,6 +184,9 @@ func (m msgManager) prepareMessage(model string, modelVariable string, data logo
 // if some components are not yet defined, then try to define them now and go to result at least
 func (m msgManager) sendMessage(model string, modelVariable string, data logol.Result, over bool) {
     // If over or final check step
+    if (data.Step != transport.STEP_YETTOBEDEFINED) {
+        m.Transport.IncrFlowStat(data.Uid, data.Model + "." + data.ModelVariable, model + "." + modelVariable)
+    }
     if over || data.Step == transport.STEP_YETTOBEDEFINED {
         if len(data.YetToBeDefined) > 0 {
             logger.Debugf("Some vars are still pending to be analysed, should check them now")
@@ -240,6 +243,9 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
         modelVariableTo := modelVariablesTo[i]
         logger.Debugf("Call model %s:%s", callModel, modelVariableTo)
         m.sendMessage(callModel, modelVariableTo, tmpResult, false)
+        if (data.Step != transport.STEP_YETTOBEDEFINED) {
+            m.Transport.IncrFlowStat(data.Uid, data.Model + "." + data.ModelVariable, callModel + "." + modelVariableTo)
+        }
     }
 
 }
@@ -663,10 +669,4 @@ func (m msgManager) handleMessage(result logol.Result) {
     }
 
     logger.Debugf("Done")
-}
-
-
-func sendStats(model string, variable string, duration int64){
-    // TODO
-    logger.Debugf("To be implemented")
 }

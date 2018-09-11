@@ -9,10 +9,10 @@ import (
         "encoding/json"
         "io/ioutil"
         "testing"
-        message "org.irisa.genouest/logol/lib/message"
-        transport "org.irisa.genouest/logol/lib/transport"
+        message "github.com/osallou/logol-go-playground/lib/message"
+        transport "github.com/osallou/logol-go-playground/lib/transport"
         "github.com/satori/go.uuid"
-        logol "org.irisa.genouest/logol/lib/types"
+        logol "github.com/osallou/logol-go-playground/lib/types"
 )
 
 func stop(t transport.Transport) {

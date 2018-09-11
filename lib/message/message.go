@@ -8,11 +8,11 @@ import (
     "os"
     "strconv"
     "time"
-    logs "org.irisa.genouest/logol/lib/log"
-    logol "org.irisa.genouest/logol/lib/types"
+    logs "github.com/osallou/logol-go-playground/lib/log"
+    logol "github.com/osallou/logol-go-playground/lib/types"
     // cassie "github.com/osallou/cassiopee-go"
-    seq "org.irisa.genouest/logol/lib/sequence"
-    transport "org.irisa.genouest/logol/lib/transport"
+    seq "github.com/osallou/logol-go-playground/lib/sequence"
+    transport "github.com/osallou/logol-go-playground/lib/transport"
     //redis "github.com/go-redis/redis"
     //"github.com/satori/go.uuid"
 )
@@ -214,7 +214,7 @@ func (m *MessageAnalyse) HandleMessage(result logol.Result) (ok bool) {
     m.msg.handleMessage(result)
     end_time := now.UnixNano()
     duration := end_time - start_time
-    //TODO sendStats(result.Model, result.ModelVariable, duration)
+    m.msg.Transport.IncrDurationStat(result.Uid, result.Model + "." +result.ModelVariable, duration)
     logger.Debugf("Duration: %d", duration)
     return true
 }
@@ -305,6 +305,6 @@ func (m *MessageCassie) HandleMessage(result logol.Result) (ok bool) {
     end_time := now.UnixNano()
     duration := end_time - start_time
     logger.Debugf("Duration: %d", duration)
-    //TODO sendStats(result.Model, result.ModelVariable, duration)
+    m.msg.Transport.IncrDurationStat(result.Uid, result.Model + "." +result.ModelVariable, duration)
     return true
 }

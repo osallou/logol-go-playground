@@ -10,7 +10,7 @@ in development
 
 rabbitmq and redis
 
-Needs cassiopee >= 1.0.9, org.irisa.genouest/cassiopee is built upon this version
+Needs cassiopee >= 1.0.9, github.com/osallou/cassiopee-go is built upon this version
 
 # building binaries
 
@@ -19,6 +19,9 @@ Needs cassiopee >= 1.0.9, org.irisa.genouest/cassiopee is built upon this versio
     $ go build ./cmd/logolMessage
     $ go build ./cmd/logolResult
 
+## setting version
+
+    go build -ldflags "-X github.com/osallou/logol-go-playground/lib/utils.Buildstamp=`date -u '+%Y-%m-%d_%I:%M:%S%p'` -X github.com/osallou/logol-go-playground/lib/utils.Githash=`git rev-parse HEAD` -X github.com/osallou/logol-go-playground/lib/utils.Version=0.1" ./cmd/logolClient
 
 # running
 
@@ -38,3 +41,5 @@ in cmd/logol[XXX]:
 then logolClient
 
 testmsg will send grammar and sequence info , once search is over it will stop processes
+
+to enable stats , LOGOL_STATS env variable should be set on processes (impacts performance)

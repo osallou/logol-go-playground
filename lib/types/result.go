@@ -24,6 +24,7 @@ type Result struct {
     Model string
     ModelVariable string
     From []From
+    Previous string
     Matches []Match
     PrevMatches [][]Match // store previous main model matches when using serial models
     ContextVars []map[string]Match
