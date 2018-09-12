@@ -45,7 +45,16 @@ testmsg will send grammar and sequence info , once search is over it will stop p
 
 # stats
 
-to enable stats , LOGOL_STATS env variable should be set on processes (impacts performance)
+to enable stats , LOGOL_STATS env variable should be set on processes.
 
 a *dot* file will be generated to represent the graph of search
 
+*logolPrometheus* can be optionally started (won't be stopped automatically) to record match time statistics and expose its metrics to prometheus. Option --listen specifies to port to listen to, then metrics are accessible via http://localhost:port/metrics
+
+To enable prometheus statistics during logol search, one must set env variable LOGOL_PROM to the url of *logolPrometheus*, example:
+
+    LOGOL_PROM=http://localhost:8080 logolMessage ...
+
+If not sent, no statistic will be sent.
+
+**Warning**: Enabling some statistics will impact performance and should be activated only for debug/analysis.

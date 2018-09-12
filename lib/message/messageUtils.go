@@ -5,6 +5,8 @@ package logol
 
 import (
     "encoding/json"
+    "os"
+    "net/http"
     //"log"
     "sort"
     "strconv"
@@ -81,6 +83,7 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
             */
             backModel := lastFrom.Model
             backVariable := lastFrom.Variable
+            data.CallbackUid = lastFrom.Uid
             data.From = data.From[:len(data.From) - 1]
             data.Step = transport.STEP_POST
             data.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], m.Grammar.Models[model].Param)
@@ -186,6 +189,7 @@ func (m msgManager) sendMessage(model string, modelVariable string, data logol.R
     // If over or final check step
     if (data.Step != transport.STEP_YETTOBEDEFINED) {
         m.Transport.IncrFlowStat(data.Uid, data.Model + "." + data.ModelVariable, model + "." + modelVariable)
+        m.SendStat(data.Model + "." + data.ModelVariable)
     }
     if over || data.Step == transport.STEP_YETTOBEDEFINED {
         if len(data.YetToBeDefined) > 0 {
@@ -222,6 +226,7 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
     newFrom := logol.From{}
     newFrom.Model = model
     newFrom.Variable = modelVariable
+    newFrom.Uid = m.getUid()
     tmpResult.From  = append(tmpResult.From, newFrom)
     //tmpResult.From = append(tmpResult.From, model + "." + modelVariable)
     tmpResult.ContextVars = data.ContextVars
@@ -245,6 +250,7 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
         m.sendMessage(callModel, modelVariableTo, tmpResult, false)
         if (data.Step != transport.STEP_YETTOBEDEFINED) {
             m.Transport.IncrFlowStat(data.Uid, data.Model + "." + data.ModelVariable, callModel + "." + modelVariableTo)
+            m.SendStat(data.Model + "." + data.ModelVariable)
         }
     }
 
@@ -413,6 +419,16 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
     m.Transport.AddCount(result.Uid, int64(incCount))
 }
 
+func (m msgManager) SendStat(modvar string) {
+    promUrl := os.Getenv("LOGOL_PROM")
+    if promUrl != "" {
+        _, err := http.Get(promUrl)
+        // Process response
+        if err != nil {
+            logger.Debugf("Could not contact prometheus process %s", promUrl)
+        }
+    }
+}
 
 func (m msgManager) handleMessage(result logol.Result) {
     // Take result message and search matching data for specified model and var
@@ -476,15 +492,18 @@ func (m msgManager) handleMessage(result logol.Result) {
 
             }
         }
+
         result.Param = make([]logol.Match, 0)
         match := logol.NewMatch()
         match.Model = model
         match.Id = modelVariable
         match.Uid = m.getUid()
+        if result.CallbackUid != "" {
+            match.Uid = result.CallbackUid
+        }
         match.IsModel = true
         logger.Debugf("Create var from model matches")
-        // TODO check if some childs are YetToBeDefined, if yes, mark model with YetToBeDefined
-        // Sets however what can be done and add subvars to match.YetToBeDefined
+
         for i, m := range result.Matches {
             if i ==0 {
                 match.Spacer = m.Spacer
@@ -506,6 +525,9 @@ func (m msgManager) handleMessage(result logol.Result) {
         }
         match, err := m.SearchUtils.PostControl(match, m.Grammar, contextVars)
         if ! err {
+            // TODO if *Not*, should ban match and record CallbackUid (set in nmatch.Uid) with match pos/len
+            // On final results, parse matches with CallbackUid, if same start/end remove them
+
             logger.Debugf("New model match pos: %d, %d", match.Start, match.End)
             match.Children = result.Matches
 
