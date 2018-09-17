@@ -591,9 +591,9 @@ func (m msgManager) handleMessage(result logol.Result) {
         if curVariable.Overlap && ! result.Overlap {
             result.Overlap = true
             lastMatch := result.Matches[len(result.Matches) - 1]
-            newPos := result.Position - int(m.Grammar.Options["MAX_PATTERN_LENGTH"] + 1)
+            newPos := result.Position - int(m.Grammar.Options["MAX_PATTERN_LENGTH"]) + 1
             if lastMatch.Start > -1 && lastMatch.End > -1 {
-                newPos = result.Position - ((lastMatch.End - lastMatch.Start) + 1)
+                newPos = result.Position - ((lastMatch.End - lastMatch.Start)) + 1
             }
             logger.Debugf("Overlap from %d to %d", newPos, result.Position)
             maxToPos := result.Position

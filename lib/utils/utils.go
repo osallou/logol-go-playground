@@ -296,7 +296,10 @@ func CheckAlphabetPercent(seqPart string, alphabet string, percent int) (bool, i
 
 
 func WriteFlowPlots(uid string, flow map[string]string, duration map[string]string) {
-    // TODO add duration in node label
+    doStatsEnv := os.Getenv("LOGOL_STATS")
+    if doStatsEnv == "" {
+        return
+    }
     f, err := os.Create("logol-" + uid + ".stats.dot")
     if err != nil {
         return
