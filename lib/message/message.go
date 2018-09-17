@@ -102,7 +102,7 @@ func (m *MessageResult) HandleMessage(result logol.Result) (ok bool) {
         m.outfile = outfile
     }
     json_msg, err := json.Marshal(result)
-    logger.Errorf("Res: %s", json_msg)
+    logger.Debugf("Res: %s", json_msg)
     if err != nil {
         logger.Errorf("Failed to get message")
         return false

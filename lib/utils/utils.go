@@ -205,7 +205,7 @@ func HasUndefinedRangeVars(expr string, contextVars map[string]logol.Match) (has
         }
         return false, variable
     }
-    logger.Errorf("testing expr %s", expr)
+    logger.Debugf("testing expr %s", expr)
     undef, undefVar := testProp(elts[0])
     if undef {
         hasUndefined = true
