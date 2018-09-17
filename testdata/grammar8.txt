@@ -1,0 +1,20 @@
+
+models:
+
+  mod1:
+   comment: 'mod1()'
+   start:
+     - var1
+   vars:
+     var1:
+         value: 'aaaaaa'
+         next:
+           - var2
+     var2:
+         value: 'acgt'
+         next: null
+         overlap: true
+run:
+ - model: mod1
+
+sequence: /home/osallou/Development/NOSAVE/gopath/src/github.com/osallou/logol-go-playground/sequence.txt

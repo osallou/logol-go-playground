@@ -236,10 +236,17 @@ func (m msgManager) call_model(model string, modelVariable string, data logol.Re
     tmpResult.Position = data.Position
     tmpResult.Param = make([]logol.Match, 0)
     tmpResult.YetToBeDefined = data.YetToBeDefined
+    tmpResult.Overlap = data.Overlap
+
     if len(curVariable.Model.Param) > 0 {
         tmpResult.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], curVariable.Model.Param)
     }
+
+    if curVariable.Overlap {
+        tmpResult.Overlap = true
+    }
     modelVariablesTo := m.Grammar.Models[callModel].Start
+
     for i := 0; i < len(modelVariablesTo); i++ {
         if i > 0 {
             m.Transport.AddCount(tmpResult.Uid, 1)
@@ -581,6 +588,27 @@ func (m msgManager) handleMessage(result logol.Result) {
             match.Overlap = true
         }
 
+        if curVariable.Overlap && ! result.Overlap {
+            result.Overlap = true
+            lastMatch := result.Matches[len(result.Matches) - 1]
+            newPos := result.Position - int(m.Grammar.Options["MAX_PATTERN_LENGTH"] + 1)
+            if lastMatch.Start > -1 && lastMatch.End > -1 {
+                newPos = result.Position - ((lastMatch.End - lastMatch.Start) + 1)
+            }
+            logger.Debugf("Overlap from %d to %d", newPos, result.Position)
+            maxToPos := result.Position
+            for i:=newPos + 1;i<=maxToPos;i++ {
+                m.Transport.AddCount(result.Uid, 1)
+            }
+            for i:=newPos;i<=maxToPos;i++ {
+                logger.Debugf("Overlap resend to pos %d", i)
+                result.Position = i
+                publish_msg := m.prepareMessage(model, modelVariable, result)
+                m.publishMessage("logol-analyse-" + m.Chuid, publish_msg)
+            }
+            return
+        }
+
         match.MinPosition = result.Position
 
         matchChannel := make(chan logol.Match)
@@ -624,6 +652,7 @@ func (m msgManager) handleMessage(result logol.Result) {
                 continue
             }
             nbMatches += 1
+            result.Overlap = false
             result.From = make([]logol.From, 0)
             for _, from := range prevFrom {
                 result.From = append(result.From, from)

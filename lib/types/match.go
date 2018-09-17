@@ -59,8 +59,7 @@ func CheckMatches(matches []Match, start_pos int, prev_spacer bool) (bool) {
                     logger.Errorf("position does not fit with overlap")
                     return false
                 }
-            }
-            if (m.Start == end_pos || end_pos == 0) {
+            } else if (m.Start == end_pos || end_pos == 0) {
                 end_pos = m.End
             } else {
                 logger.Errorf("position does not fit with previous match end")
