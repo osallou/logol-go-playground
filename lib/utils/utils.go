@@ -3,6 +3,7 @@ package logol
 import (
     //"log"
     //"io/ioutil"
+    // "encoding/json"
     "os"
     "regexp"
     "strconv"

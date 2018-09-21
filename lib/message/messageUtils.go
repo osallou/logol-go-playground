@@ -140,12 +140,25 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                 return
             }
 
-            // TODO Check global models meta constraints
+            data.Iteration = 0
+            data.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], m.Grammar.Models[model].Param)
 
             if len(m.Grammar.Meta) > 0 {
                 logger.Debugf("Check global meta constraints")
-                modelsContextVars := make(map[string]logol.Match)
                 model := m.Grammar.Run[modelsToRun].Model
+                modelsContextVars := make(map[string]logol.Match)
+
+                // Load context vars
+                for mi:=0; mi < modelsToRun; mi++ {
+                    currentModelParams := m.Grammar.Run[mi].Param
+                    for i, param := range currentModelParams {
+                        modelsContextVars[param] = data.ContextVars[len(data.ContextVars) - 1][m.Grammar.Models[model].Param[i]]
+                    }
+
+                }
+
+
+
                 tmpMatch := logol.NewMatch()
                 tmpMatch.Start = data.Matches[0].Start
                 tmpMatch.End = data.Matches[len(data.Matches) - 1].End
@@ -166,7 +179,7 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                   modelsContextVars[model] = tmpMatch
 
                 }
-
+                
                 for _, meta := range m.Grammar.Meta {
                     logger.Debugf("Check global meta constraint %s", meta)
                     isMetaOk := utils.Evaluate(meta, modelsContextVars)
@@ -179,9 +192,6 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                 }
             }
 
-
-            data.Iteration = 0
-            data.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], m.Grammar.Models[model].Param)
             data_json, _ := json.Marshal(data)
             logger.Debugf("Match:Over:SendResult: %s", data_json)
             m.sendMessage("over", "over", data, true)
