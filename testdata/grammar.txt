@@ -66,4 +66,7 @@ run:
    param:
      - R8
 
+meta:
+  - "#mod1 == 14"
+  - "#mod2 == 3"
 sequence: /home/osallou/Development/NOSAVE/gopath/src/github.com/osallou/logol-go-playground/sequence.txt

@@ -140,6 +140,46 @@ func (m msgManager) go_next(model string, modelVariable string, data logol.Resul
                 return
             }
 
+            // TODO Check global models meta constraints
+
+            if len(m.Grammar.Meta) > 0 {
+                logger.Debugf("Check global meta constraints")
+                modelsContextVars := make(map[string]logol.Match)
+                model := m.Grammar.Run[modelsToRun].Model
+                tmpMatch := logol.NewMatch()
+                tmpMatch.Start = data.Matches[0].Start
+                tmpMatch.End = data.Matches[len(data.Matches) - 1].End
+                for m:=0;m<len(data.Matches);m++ {
+                    tmpMatch.Sub += data.Matches[m].Sub
+                    tmpMatch.Indel += data.Matches[m].Indel
+                }
+                modelsContextVars[model] = tmpMatch
+                for i:=0; i < modelsToRun; i++ {
+                  model := m.Grammar.Run[i].Model
+                  tmpMatch := logol.NewMatch()
+                  tmpMatch.Start = data.PrevMatches[i][0].Start
+                  tmpMatch.End = data.PrevMatches[i][len(data.PrevMatches[i]) - 1].End
+                  for m:=0;m<len(data.PrevMatches[i]);m++ {
+                      tmpMatch.Sub += data.PrevMatches[i][m].Sub
+                      tmpMatch.Indel += data.PrevMatches[i][m].Indel
+                  }
+                  modelsContextVars[model] = tmpMatch
+
+                }
+
+                for _, meta := range m.Grammar.Meta {
+                    logger.Debugf("Check global meta constraint %s", meta)
+                    isMetaOk := utils.Evaluate(meta, modelsContextVars)
+                    if ! isMetaOk {
+                        logger.Debugf("Global meta check failed %s", meta)
+                        m.Transport.AddBan(data.Uid, 1)
+                        return
+                    }
+                    logger.Debugf("Meta ok!")
+                }
+            }
+
+
             data.Iteration = 0
             data.Param = m.setParam(data.ContextVars[len(data.ContextVars) - 1], m.Grammar.Models[model].Param)
             data_json, _ := json.Marshal(data)
@@ -588,7 +628,7 @@ func (m msgManager) handleMessage(result logol.Result) {
             match.Overlap = true
         }
 
-        if curVariable.Overlap && ! result.Overlap {
+        if !result.Spacer && curVariable.Overlap && ! result.Overlap {
             result.Overlap = true
             lastMatch := result.Matches[len(result.Matches) - 1]
             newPos := result.Position - int(m.Grammar.Options["MAX_PATTERN_LENGTH"]) + 1

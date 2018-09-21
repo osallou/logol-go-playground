@@ -78,6 +78,7 @@ type Grammar struct {
     Morphisms map[string]Morphism
     Models map[string]Model
     Run []MainModel
+    Meta []string  // Meta constraints on models e.g. #mod1 < # mod2
     Sequence string
 }
 

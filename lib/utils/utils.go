@@ -58,7 +58,8 @@ func Evaluate(expr string, contextVars map[string]logol.Match) bool {
 
     re := regexp.MustCompile("[$@#]+\\w+")
     res := re.FindAllString(expr, -1)
-
+    // msg, _ := json.Marshal(contextVars)
+    // logger.Errorf("CONTEXT: %s", msg)
     parameters := make(map[string]interface{}, 8)
     varIndex := 0
     for _, val := range res {
