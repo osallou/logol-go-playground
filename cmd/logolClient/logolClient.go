@@ -197,8 +197,9 @@ func main() {
 	}
 
 	toBan := t.GetToBan(data.Uid)
-	filtered, totalMatches := utils.FilterOut(t, outFilePath, toBan)
+	filtered, duplicates, totalMatches := utils.FilterOut(t, outFilePath, toBan)
 	log.Printf("Filtered matches: %d", filtered)
+	log.Printf("Filtered duplicates: %d", duplicates)
 	log.Printf("Number of matches: %d", totalMatches)
 
 	log.Printf("Result file: %s", outFilePath)

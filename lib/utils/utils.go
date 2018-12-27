@@ -33,7 +33,7 @@ const PROP_INDEL = 3
 const PROP_CONTENT = 4
 const PROP_SIZE = 5
 
-func FilterOut(t transport.Transport, filePath string, toBan []string) (filtered int, nbMatch int) {
+func FilterOut(t transport.Transport, filePath string, toBan []string) (filtered int, duplicates int, nbMatch int) {
 	for i := 0; i < len(toBan); i++ {
 		logger.Debugf("Should ban: %s", toBan[i])
 	}
@@ -51,11 +51,18 @@ func FilterOut(t transport.Transport, filePath string, toBan []string) (filtered
 	defer file.Close()
 
 	filtered = 0
+	duplicates = 0
 	nbMatch = 0
 	scanner := bufio.NewScanner(file)
+	prevMatch := ""
 	for scanner.Scan() {
 		match := [][]logol.Match{}
 		jsonMatch := scanner.Text()
+		if jsonMatch == prevMatch {
+			duplicates++
+			continue
+		}
+		prevMatch = jsonMatch
 		// fmt.Println(jsonMatch)
 		err := json.Unmarshal([]byte(jsonMatch), &match)
 		if err != nil {
@@ -91,7 +98,7 @@ func FilterOut(t transport.Transport, filePath string, toBan []string) (filtered
 		}
 	}
 	os.Rename(tmpfile.Name(), filePath)
-	return filtered, nbMatch
+	return filtered, duplicates, nbMatch
 }
 
 // Get size of global match
