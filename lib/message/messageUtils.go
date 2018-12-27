@@ -310,6 +310,7 @@ func (m msgManager) sendMessage(model string, modelVariable string, data logol.R
 				m.Transport.AddToBan(data.Uid, data.ExpectNoMatchVar.Uid)
 				return
 			}
+			data.Matches = data.Matches[:0]
 		}
 		publishMsg := m.prepareMessage(model, modelVariable, data)
 		m.publishMessage("logol-result-"+m.Chuid, publishMsg)
@@ -405,6 +406,7 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
 					m.Transport.AddToBan(result.Uid, result.ExpectNoMatchVar.Uid)
 					return
 				}
+				result.Matches = result.Matches[:0]
 			}
 			if result.ExpectNoMatchUID != "" {
 				result.ExpectNoMatchUID = ""
@@ -833,11 +835,13 @@ func (m msgManager) handleMessage(result logol.Result) {
 			if curVariable.String_constraints.SaveAs != "" {
 				saveAs := curVariable.String_constraints.SaveAs
 				contextVar, contextVarAlreadyDefined := contextVars[saveAs]
-				logger.Debugf("SAVE AS %s %v", saveAs, contextVar)
 				if contextVarAlreadyDefined {
-					if contextVar.Uid != "" {
-						match.Uid = contextVar.Uid
-					}
+					contextVar.Uid = match.Uid
+					/*
+						if contextVar.Uid != "" {
+							match.Uid = contextVar.Uid
+						}
+					*/
 				}
 				contextVars[saveAs] = match
 				// json_msg, _ = json.Marshal(contextVars)
