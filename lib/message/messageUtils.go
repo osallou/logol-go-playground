@@ -76,6 +76,12 @@ func (m msgManager) hasNextModel(data logol.Result) bool {
 func (m msgManager) goNextModel(model string, data logol.Result) {
 	modelTo := m.Grammar.Run[data.RunIndex+1].Model
 	modelVariablesTo := m.Grammar.Models[modelTo].Start
+
+	if m.Grammar.Run[data.RunIndex+1].Nomatch != "" {
+		logger.Debugf("goNextModel: expect no match")
+		data.ExpectNoMatchUID = m.getUID()
+	}
+
 	for i := 0; i < len(modelVariablesTo); i++ {
 		if i > 0 {
 			//m.Client.Incr("logol:" + data.Uid + ":count")
@@ -84,6 +90,8 @@ func (m msgManager) goNextModel(model string, data logol.Result) {
 		modelVariableTo := modelVariablesTo[i]
 		logger.Debugf("Go to next main model %s:%s", modelTo, modelVariableTo)
 		tmpResult := logol.NewResult()
+		tmpResult.ExpectNoMatch = data.ExpectNoMatch
+		//tmpResult.ExpectNoMatchUID = data.ExpectNoMatchUID
 		tmpResult.Uid = data.Uid
 		tmpResult.Outfile = data.Outfile
 		//data.From = make([]string, 0)
@@ -98,6 +106,16 @@ func (m msgManager) goNextModel(model string, data logol.Result) {
 		for i, param := range currentModelParams {
 			tmpContextVars[param] = data.ContextVars[len(data.ContextVars)-1][m.Grammar.Models[model].Param[i]]
 		}
+
+		if m.Grammar.Run[data.RunIndex+1].Nomatch != "" {
+			noMatchVar := data.ContextVars[len(data.ContextVars)-1][m.Grammar.Run[data.RunIndex+1].Nomatch]
+			tmpResult.ExpectNoMatch = true
+			tmpResult.ExpectNoMatchVar = noMatchVar
+			tmpResult.Spacer = false
+			tmpResult.Position = noMatchVar.Start
+			logger.Debugf("New model expects no match, remove spacer and set position")
+		}
+
 		modelParams := m.Grammar.Run[data.RunIndex+1].Param
 		tmpResult.Param = make([]logol.Match, len(modelParams))
 		for i, param := range modelParams {
@@ -105,6 +123,7 @@ func (m msgManager) goNextModel(model string, data logol.Result) {
 			if !ok {
 				logger.Debugf("Param %s not available adding empty one", param)
 				tmpResult.Param[i] = logol.NewMatch()
+				tmpResult.Param[i].Uid = m.getUID()
 			} else {
 				logger.Debugf("Add param %s", param)
 				tmpResult.Param[i] = p
@@ -113,8 +132,67 @@ func (m msgManager) goNextModel(model string, data logol.Result) {
 
 		tmpResult.ContextVars = make([]map[string]logol.Match, 0)
 		tmpResult.RunIndex = data.RunIndex + 1
+		logger.Debugf("Go to next main model %s.%s", modelTo, modelVariableTo)
 		m.sendMessage(modelTo, modelVariableTo, tmpResult, false)
 	}
+}
+
+func (m msgManager) checkMetaBeforeResult(model string, data logol.Result) bool {
+	data.Iteration = 0
+	data.Param = m.setParam(data.ContextVars[len(data.ContextVars)-1], m.Grammar.Models[model].Param)
+	modelsToRun := len(m.Grammar.Run) - 1
+
+	if len(m.Grammar.Meta) > 0 {
+		logger.Debugf("Check global meta constraints")
+		model := m.Grammar.Run[modelsToRun].Model
+		modelsContextVars := make(map[string]logol.Match)
+
+		// Load context vars
+		for mi := 0; mi < modelsToRun; mi++ {
+			currentModelParams := m.Grammar.Run[mi].Param
+			for i, param := range currentModelParams {
+				modelsContextVars[param] = data.ContextVars[len(data.ContextVars)-1][m.Grammar.Models[model].Param[i]]
+			}
+
+		}
+
+		tmpMatch := logol.NewMatch()
+		tmpMatch.Start = data.Matches[0].Start
+		tmpMatch.End = data.Matches[len(data.Matches)-1].End
+		for m := 0; m < len(data.Matches); m++ {
+			tmpMatch.Sub += data.Matches[m].Sub
+			tmpMatch.Indel += data.Matches[m].Indel
+		}
+		modelsContextVars[model] = tmpMatch
+		for i := 0; i < modelsToRun; i++ {
+			model := m.Grammar.Run[i].Model
+			tmpMatch := logol.NewMatch()
+			tmpMatch.Start = data.PrevMatches[i][0].Start
+			tmpMatch.End = data.PrevMatches[i][len(data.PrevMatches[i])-1].End
+			for m := 0; m < len(data.PrevMatches[i]); m++ {
+				tmpMatch.Sub += data.PrevMatches[i][m].Sub
+				tmpMatch.Indel += data.PrevMatches[i][m].Indel
+			}
+			modelsContextVars[model] = tmpMatch
+
+		}
+
+		for _, meta := range m.Grammar.Meta {
+			logger.Debugf("Check global meta constraint %s", meta)
+			isMetaOk := utils.Evaluate(meta, modelsContextVars)
+			if !isMetaOk {
+				logger.Debugf("Global meta check failed %s", meta)
+				m.Transport.AddBan(data.Uid, 1)
+				return false
+			}
+			logger.Debugf("Meta ok!")
+		}
+	}
+
+	// data_json, _ := json.Marshal(data)
+	// logger.Debugf("Match:Over:SendResult: %s", data_json)
+	m.sendMessage("over", "over", data, true)
+	return true
 }
 
 // Look at next variables and send result info to each of them
@@ -147,112 +225,20 @@ func (m msgManager) goNext(model string, modelVariable string, data logol.Result
 			logger.Debugf("Go back to calling model %s %s", backModel, backVariable)
 			m.sendMessage(backModel, backVariable, data, false)
 		} else {
-			modelsToRun := len(m.Grammar.Run) - 1
-			logger.Debugf("Other main models? %d vs %d", data.RunIndex, modelsToRun)
-			if data.RunIndex < modelsToRun {
-				m.goNextModel(model, data)
-				/*
-									// Run next main model
-									modelTo := m.Grammar.Run[data.RunIndex+1].Model
-									modelVariablesTo := m.Grammar.Models[modelTo].Start
-									for i := 0; i < len(modelVariablesTo); i++ {
-										if i > 0 {
-											//m.Client.Incr("logol:" + data.Uid + ":count")
-											m.Transport.AddCount(data.Uid, 1)
-										}
-										modelVariableTo := modelVariablesTo[i]
-										logger.Debugf("Go to next main model %s:%s", modelTo, modelVariableTo)
-										tmpResult := logol.NewResult()
-										tmpResult.Uid = data.Uid
-										tmpResult.Outfile = data.Outfile
-										//data.From = make([]string, 0)
-										tmpResult.PrevMatches = append(data.PrevMatches, data.Matches)
-										tmpResult.Matches = make([]logol.Match, 0)
-										tmpResult.Spacer = true
-										tmpResult.Position = 0
-										tmpResult.YetToBeDefined = data.YetToBeDefined
-										// Update params
-										tmpContextVars := make(map[string]logol.Match)
-										currentModelParams := m.Grammar.Run[data.RunIndex].Param
-										for i, param := range currentModelParams {
-											tmpContextVars[param] = data.ContextVars[len(data.ContextVars)-1][m.Grammar.Models[model].Param[i]]
-										}
-										modelParams := m.Grammar.Run[data.RunIndex+1].Param
-										tmpResult.Param = make([]logol.Match, len(modelParams))
-										for i, param := range modelParams {
-											p, ok := tmpContextVars[param]
-											if !ok {
-												logger.Debugf("Param %s not available adding empty one", param)
-												tmpResult.Param[i] = logol.NewMatch()
-											} else {
-												logger.Debugf("Add param %s", param)
-												tmpResult.Param[i] = p
-											}
-										}
-										// debug_json, _ := json.Marshal(tmpResult)
-										// logger.Debugf("Send to main model: %s", debug_json)
-
-										tmpResult.ContextVars = make([]map[string]logol.Match, 0)
-										tmpResult.RunIndex = data.RunIndex + 1
-										m.sendMessage(modelTo, modelVariableTo, tmpResult, false)
-					                }
-				*/
-				return
-			}
-
-			data.Iteration = 0
-			data.Param = m.setParam(data.ContextVars[len(data.ContextVars)-1], m.Grammar.Models[model].Param)
-
-			if len(m.Grammar.Meta) > 0 {
-				logger.Debugf("Check global meta constraints")
-				model := m.Grammar.Run[modelsToRun].Model
-				modelsContextVars := make(map[string]logol.Match)
-
-				// Load context vars
-				for mi := 0; mi < modelsToRun; mi++ {
-					currentModelParams := m.Grammar.Run[mi].Param
-					for i, param := range currentModelParams {
-						modelsContextVars[param] = data.ContextVars[len(data.ContextVars)-1][m.Grammar.Models[model].Param[i]]
-					}
-
-				}
-
-				tmpMatch := logol.NewMatch()
-				tmpMatch.Start = data.Matches[0].Start
-				tmpMatch.End = data.Matches[len(data.Matches)-1].End
-				for m := 0; m < len(data.Matches); m++ {
-					tmpMatch.Sub += data.Matches[m].Sub
-					tmpMatch.Indel += data.Matches[m].Indel
-				}
-				modelsContextVars[model] = tmpMatch
-				for i := 0; i < modelsToRun; i++ {
-					model := m.Grammar.Run[i].Model
-					tmpMatch := logol.NewMatch()
-					tmpMatch.Start = data.PrevMatches[i][0].Start
-					tmpMatch.End = data.PrevMatches[i][len(data.PrevMatches[i])-1].End
-					for m := 0; m < len(data.PrevMatches[i]); m++ {
-						tmpMatch.Sub += data.PrevMatches[i][m].Sub
-						tmpMatch.Indel += data.PrevMatches[i][m].Indel
-					}
-					modelsContextVars[model] = tmpMatch
-
-				}
-
-				for _, meta := range m.Grammar.Meta {
-					logger.Debugf("Check global meta constraint %s", meta)
-					isMetaOk := utils.Evaluate(meta, modelsContextVars)
-					if !isMetaOk {
-						logger.Debugf("Global meta check failed %s", meta)
-						m.Transport.AddBan(data.Uid, 1)
-						return
-					}
-					logger.Debugf("Meta ok!")
-				}
-			}
-
-			// data_json, _ := json.Marshal(data)
-			// logger.Debugf("Match:Over:SendResult: %s", data_json)
-			m.sendMessage("over", "over", data, true)
+			data.Step = transport.STEP_YETTOBEDEFINED
+			publishMsg := m.prepareMessage(model, modelVariable, data)
+			m.publishMessage("logol-analyse-"+m.Chuid, publishMsg)
+			/*
+							if m.hasNextModel(data) {
+								logger.Debugf("Has other main models, go to next model")
+								m.goNextModel(model, data)
+								return
+							}
+							metaOk := m.checkMetaBeforeResult(model, data)
+							if !metaOk {
+								logger.Debugf("Global meta constrols failed")
+				            }
+			*/
 		}
 	} else {
 		logger.Debugf("Go to next vars")
@@ -306,6 +292,25 @@ func (m msgManager) sendMessage(model string, modelVariable string, data logol.R
 			m.publishMessage("logol-analyse-"+m.Chuid, publishMsg)
 			return
 		}
+		if over {
+			metaOk := m.checkMetaBeforeResult(model, data)
+			if !metaOk {
+				logger.Debugf("Global meta constrols failed")
+				return
+			}
+		}
+
+		if data.ExpectNoMatch {
+			begin := data.Matches[0].Start
+			end := data.Matches[len(data.Matches)-1].End
+			logger.Debugf("Expecting no match, compare if equals")
+			if data.ExpectNoMatchVar.Start == begin && data.ExpectNoMatchVar.End == end {
+				logger.Debugf("Got a match while expecting no match")
+				m.Transport.AddBan(data.Uid, 1)
+				m.Transport.AddToBan(data.Uid, data.ExpectNoMatchVar.Uid)
+				return
+			}
+		}
 		publishMsg := m.prepareMessage(model, modelVariable, data)
 		m.publishMessage("logol-result-"+m.Chuid, publishMsg)
 
@@ -342,6 +347,9 @@ func (m msgManager) callModel(model string, modelVariable string, data logol.Res
 	tmpResult.Param = make([]logol.Match, 0)
 	tmpResult.YetToBeDefined = data.YetToBeDefined
 	tmpResult.Overlap = data.Overlap
+	tmpResult.ExpectNoMatch = data.ExpectNoMatch
+	tmpResult.ExpectNoMatchUID = data.ExpectNoMatchUID
+	tmpResult.ExpectNoMatchVar = data.ExpectNoMatchVar
 
 	if len(curVariable.Model.Param) > 0 {
 		tmpResult.Param = m.setParam(data.ContextVars[len(data.ContextVars)-1], curVariable.Model.Param)
@@ -369,17 +377,42 @@ func (m msgManager) callModel(model string, modelVariable string, data logol.Res
 }
 
 func (m msgManager) handleYetToBeDefined(result logol.Result, model string, modelVariable string) {
+	logger.Debugf("handleYetToBeDefined for %s", model)
 	index := result.GetFirstMatchAnalysable()
 	if index == -1 {
-		logger.Debugf("No variable in YetToBeDefined can be analysed, stopping here")
-		m.Transport.AddBan(result.Uid, 1)
+		logger.Debugf("No variable in YetToBeDefined can be analysed")
+		if m.hasNextModel(result) {
+			m.goNextModel(model, result)
+		} else {
+			m.Transport.AddBan(result.Uid, 1)
+		}
 		//m.Client.Incr("logol:" + result.Uid + ":ban")
 		return
 	}
 	if index == -2 {
 		logger.Debugf("All yet to be defined done, sending result")
-		publishMsg := m.prepareMessage("over", "over", result)
-		m.publishMessage("logol-result-"+m.Chuid, publishMsg)
+		// TODO check if a "not" model and compare with variable length
+		if m.hasNextModel(result) {
+			m.goNextModel(model, result)
+		} else {
+			if result.ExpectNoMatch {
+				begin := result.Matches[0].Start
+				end := result.Matches[len(result.Matches)-1].End
+				logger.Debugf("Got a match while expecting no match, check if equals")
+				if result.ExpectNoMatchVar.Start == begin && result.ExpectNoMatchVar.End == end {
+					logger.Debugf("Got a match while expecting no match")
+					m.Transport.AddBan(result.Uid, 1)
+					m.Transport.AddToBan(result.Uid, result.ExpectNoMatchVar.Uid)
+					return
+				}
+			}
+			if result.ExpectNoMatchUID != "" {
+				result.ExpectNoMatchUID = ""
+				result.ExpectNoMatch = false
+			}
+			publishMsg := m.prepareMessage("over", "over", result)
+			m.publishMessage("logol-result-"+m.Chuid, publishMsg)
+		}
 		return
 	}
 
@@ -530,6 +563,16 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
 
 	if nbMatches == 0 {
 		//m.Client.Incr("logol:" + result.Uid + ":ban")
+		if result.ExpectNoMatch {
+			logger.Debugf("Expect no match, go to next model")
+			if m.hasNextModel(result) {
+				m.goNextModel(model, result)
+			} else {
+				publishMsg := m.prepareMessage("over", "over", result)
+				m.publishMessage("logol-result-"+m.Chuid, publishMsg)
+			}
+			return
+		}
 		m.Transport.AddBan(result.Uid, 1)
 		return
 	}
@@ -547,6 +590,15 @@ func (m msgManager) SendStat(modvar string) {
 			logger.Debugf("Could not contact prometheus process %s", promURL)
 		}
 	}
+}
+
+// check if all match possibilities were analysed for ExpectNoMatch cases
+func (m msgManager) isAllMatchesAnalsed(result logol.Result) {
+	// TODO
+	if !result.ExpectNoMatch {
+		return
+	}
+
 }
 
 func (m msgManager) handleMessage(result logol.Result) {
@@ -604,6 +656,7 @@ func (m msgManager) handleMessage(result logol.Result) {
 				} else {
 					logger.Debugf("Param not defined %s", outputID)
 					match := logol.NewMatch()
+					match.Uid = m.getUID()
 					match.Id = outputID
 					match.Model = model
 					contextVars[outputID] = match
@@ -780,8 +833,11 @@ func (m msgManager) handleMessage(result logol.Result) {
 			if curVariable.String_constraints.SaveAs != "" {
 				saveAs := curVariable.String_constraints.SaveAs
 				contextVar, contextVarAlreadyDefined := contextVars[saveAs]
+				logger.Debugf("SAVE AS %s %v", saveAs, contextVar)
 				if contextVarAlreadyDefined {
-					match.Uid = contextVar.Uid
+					if contextVar.Uid != "" {
+						match.Uid = contextVar.Uid
+					}
 				}
 				contextVars[saveAs] = match
 				// json_msg, _ = json.Marshal(contextVars)
@@ -807,13 +863,25 @@ func (m msgManager) handleMessage(result logol.Result) {
 
 			m.goNext(model, modelVariable, result)
 		}
+
 		if toForward {
 			result.Step = transport.STEP_CASSIE
 			publishMsg := m.prepareMessage(model, modelVariable, result)
 			m.publishMessage("logol-cassie-"+m.Chuid, publishMsg)
 			return
 		}
+		logger.Debugf("Number matches: %d, nomatch? %t", nbMatches, result.ExpectNoMatch)
 		if nbMatches == 0 {
+			if result.ExpectNoMatch {
+				logger.Debugf("Expect no match, go to next model")
+				if m.hasNextModel(result) {
+					m.goNextModel(model, result)
+				} else {
+					publishMsg := m.prepareMessage("over", "over", result)
+					m.publishMessage("logol-result-"+m.Chuid, publishMsg)
+				}
+				return
+			}
 			m.Transport.AddBan(result.Uid, 1)
 			//m.Client.Incr("logol:" + result.Uid + ":ban")
 			return

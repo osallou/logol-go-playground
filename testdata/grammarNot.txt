@@ -1,0 +1,48 @@
+models:
+  mod2:
+    comment: 'mod2()'
+    start:
+      - var1
+      - var2
+    vars:
+        var1:
+            value: 'aa'
+            next: null
+        var2:
+            value: 'cc'
+            next: null
+
+
+  mod1:
+   comment: 'mod1(-R1)'
+   param:
+     - 'R1'
+   start:
+     - var1
+   vars:
+     var1:
+         value: 'cc'
+         next:
+           - var2
+     var2:
+         value: 'aaa'
+         next:
+          - var3
+     var3:
+         value: null
+         string_constraints:
+            saveas: 'R1'
+            size:
+                min: 2
+                max: 3
+         next: null
+
+run:
+ - model: mod1
+   param:
+     - R1
+ - model: mod2
+   nomatch: R1
+
+
+sequence: /home/osallou/Development/NOSAVE/gopath/src/github.com/osallou/logol-go-playground/sequence.txt

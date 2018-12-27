@@ -16,28 +16,30 @@ type From struct {
 }
 
 type Result struct {
-	Outfile        string
-	SequenceFile   string
-	RunIndex       int
-	Uid            string
-	MsgTo          string
-	Model          string
-	ModelVariable  string
-	From           []From
-	CallbackUid    string
-	Previous       string
-	Matches        []Match
-	PrevMatches    [][]Match // store previous main model matches when using serial models
-	ContextVars    []map[string]Match
-	Spacer         bool
-	Overlap        bool
-	Context        [][]Match
-	Step           int
-	Position       int
-	Iteration      int
-	Param          []Match
-	YetToBeDefined []Match // temporary store matches depending on variables not yet defined
-	ExpectNoMatch  bool
+	Outfile          string
+	SequenceFile     string
+	RunIndex         int
+	Uid              string
+	MsgTo            string
+	Model            string
+	ModelVariable    string
+	From             []From
+	CallbackUid      string
+	Previous         string
+	Matches          []Match
+	PrevMatches      [][]Match // store previous main model matches when using serial models
+	ContextVars      []map[string]Match
+	Spacer           bool
+	Overlap          bool
+	Context          [][]Match
+	Step             int
+	Position         int
+	Iteration        int
+	Param            []Match
+	YetToBeDefined   []Match // temporary store matches depending on variables not yet defined
+	ExpectNoMatch    bool
+	ExpectNoMatchVar Match
+	ExpectNoMatchUID string
 }
 
 func NewResult() Result {

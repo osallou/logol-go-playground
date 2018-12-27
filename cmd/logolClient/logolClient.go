@@ -187,9 +187,21 @@ func main() {
 	}
 
 	stats := t.GetStats(data.Uid)
-	json_stats, _ := json.Marshal(stats)
-	log.Printf("Stats: %s", json_stats)
+
+	jsonStats, _ := json.Marshal(stats)
+	log.Printf("Stats: %s", jsonStats)
 	utils.WriteFlowPlots(data.Uid, stats.Flow, stats.Duration)
+	outFilePath := "logol." + uid + ".out"
+	if outfile != "" {
+		outFilePath = outfile
+	}
+
+	toBan := t.GetToBan(data.Uid)
+	filtered, totalMatches := utils.FilterOut(t, outFilePath, toBan)
+	log.Printf("Filtered matches: %d", filtered)
+	log.Printf("Number of matches: %d", totalMatches)
+
+	log.Printf("Result file: %s", outFilePath)
 
 	t.Close()
 	t.Clear(data.Uid)

@@ -75,7 +75,7 @@ type Model struct {
 type MainModel struct {
 	Model   string
 	Param   []string
-	NoMatch string // Id of the variable the model should not match
+	Nomatch string // Id of the variable the model should not match
 }
 
 type Grammar struct {
