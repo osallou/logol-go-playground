@@ -1,6 +1,11 @@
 # about
 
-Logol rewriting in go
+Logol rewriting in go.
+
+Logol is a biological pattern matching tool against DNA or protein sequences.
+It matches a grammar againts one or several sequences to find patterns (exact match or with allowed morphisms, substitutions or indels).
+
+Original Logol was written in Prolog and hosted at https://github.com/genouest/logol.
 
 ## status
 
