@@ -76,3 +76,8 @@ godoc can be accessed locally:
 
     godoc -http=:6060
     => http://localhost:6060/pkg/github.com/osallou/logol-go-playground
+
+## testing
+
+    go test -coverprofile=coverage.out ./...
+    go tool cover -html=coverage.out -o coverage.html

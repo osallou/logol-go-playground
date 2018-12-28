@@ -90,7 +90,7 @@ func startGrammar(resChan chan [][]logol.Match, grammarFile string) [][]logol.Ma
 	log.Printf("Wait for results now....")
 
 	for result := range resChan {
-		nbResults += 1
+		nbResults++
 		if nbResults == 1 {
 			firstResult = result
 		}
@@ -116,15 +116,15 @@ func TestGrammar(t *testing.T) {
 	grammar := filepath.Join("testdata", "grammar.txt")
 	resChan := make(chan [][]logol.Match)
 	result := startGrammar(resChan, grammar)
-	json_msg, _ := json.Marshal(result)
-	log.Printf("Result: %s", json_msg)
+	jsonMsg, _ := json.Marshal(result)
+	log.Printf("Result: %s", jsonMsg)
 	if len(result) != 2 {
 		t.Errorf("Invalid number of model")
 	}
 	model1 := result[0]
 	var1 := model1[0]
 	if var1.Start != 2 && var1.End != 4 {
-		t.Errorf("Invalid result: %s", json_msg)
+		t.Errorf("Invalid result: %s", jsonMsg)
 	}
 
 }
@@ -135,18 +135,32 @@ func TestNegConstraint(t *testing.T) {
 	grammar := filepath.Join("testdata", "negative_constraint.txt")
 	resChan := make(chan [][]logol.Match)
 	result := startGrammar(resChan, grammar)
-	json_msg, _ := json.Marshal(result)
-	log.Printf("Result: %s", json_msg)
+	jsonMsg, _ := json.Marshal(result)
+	log.Printf("Result: %s", jsonMsg)
 	if len(result) != 1 {
 		t.Errorf("Invalid number of model")
 	}
 	model1 := result[0]
 	var1 := model1[0]
 	if var1.Start != 4 && var1.End != 10 {
-		t.Errorf("Invalid result: %s", json_msg)
+		t.Errorf("Invalid result: %s", jsonMsg)
 	}
 	var2 := model1[1]
 	if var2.Start != 10 && var2.End != 15 {
-		t.Errorf("Invalid result: %s", json_msg)
+		t.Errorf("Invalid result: %s", jsonMsg)
 	}
+}
+
+func TestGrammarNot(t *testing.T) {
+	log.Printf("Test grammar")
+	//handler := Handler{}
+	grammar := filepath.Join("testdata", "grammar_not.txt")
+	resChan := make(chan [][]logol.Match)
+	result := startGrammar(resChan, grammar)
+	jsonMsg, _ := json.Marshal(result)
+	log.Printf("Result: %s", jsonMsg)
+	if len(result) == 0 || len(result[0]) == 0 {
+		t.Errorf("should have found a model")
+	}
+
 }
