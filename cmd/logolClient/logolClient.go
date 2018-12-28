@@ -18,6 +18,7 @@ import (
 	//msgHandler "org.irisa.genouest/logol/lib/listener"
 	//redis "github.com/go-redis/redis"
 	message "github.com/osallou/logol-go-playground/lib/message"
+	"github.com/osallou/logol-go-playground/lib/sequence"
 	transport "github.com/osallou/logol-go-playground/lib/transport"
 	logol "github.com/osallou/logol-go-playground/lib/types"
 	"github.com/satori/go.uuid"
@@ -40,6 +41,7 @@ func main() {
 	var uid string
 	var outfile string
 	var version bool
+	var fasta bool
 	var nbAnalyseProc int64
 
 	flag.Int64Var(&maxpatternlen, "maxpatternlen", 1000, "Maximum size of patterns to search")
@@ -51,6 +53,7 @@ func main() {
 	flag.StringVar(&sequenceFile, "sequence", "", "Sequence file path")
 	flag.StringVar(&outfile, "out", "", "Output file path")
 	flag.BoolVar(&version, "version", false, "Get version info")
+	flag.BoolVar(&fasta, "fasta", false, "Get results in fasta format")
 	flag.Parse()
 	logger.Infof("option maxpatternlen: %d", maxpatternlen)
 	logger.Infof("option mode: %d", mode)
@@ -208,6 +211,11 @@ func main() {
 	log.Printf("Number of matches: %d", totalMatches)
 
 	log.Printf("Result file: %s", outFilePath)
+	if fasta {
+		g, _ := t.GetGrammar("logol:" + data.Uid + ":grammar")
+		fout := sequence.GetFasta(g, outFilePath)
+		log.Printf("Fasta file: %s", fout)
+	}
 
 	t.Close()
 	t.Clear(data.Uid)

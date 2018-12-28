@@ -2,7 +2,10 @@
 package sequence
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -71,6 +74,53 @@ func NewSequenceLru(sequence Sequence) (seq SequenceLru) {
 	seq.Sequence = sequence
 	seq.Lru, _ = lru.New(10)
 	return seq
+}
+
+// GetFasta parse result file and write it in Fasta format
+func GetFasta(grammar logol.Grammar, resultFile string) (outFile string) {
+	outFile = resultFile + ".fasta"
+	seq := NewSequence(grammar.Sequence)
+	seqLru := NewSequenceLru(seq)
+
+	file, err := os.Open(resultFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	outfile, errout := os.Create(outFile)
+	if errout != nil {
+		log.Fatal(errout)
+	}
+	defer outfile.Close()
+
+	scanner := bufio.NewScanner(file)
+	count := 0
+	for scanner.Scan() {
+		match := [][]logol.Match{}
+		jsonMatch := scanner.Text()
+		err := json.Unmarshal([]byte(jsonMatch), &match)
+		if err != nil {
+			logger.Errorf("Failed to decode result")
+			continue
+		}
+		subcount := 0
+		for i := 0; i < len(match); i++ {
+			matchPart := match[i]
+			if len(matchPart) == 0 {
+				subcount++
+				continue
+			}
+			start := matchPart[0].Start
+			end := matchPart[len(matchPart)-1].End
+			c := seqLru.GetContent(start, end)
+			fmt.Fprintf(outfile, ">%d.%d\n", count, subcount)
+			fmt.Fprintf(outfile, "%s\n", c)
+			subcount++
+		}
+		count++
+	}
+	return outFile
 }
 
 // GetContent get content from sequence using LRU cache
