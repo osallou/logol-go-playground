@@ -1,27 +1,26 @@
-package logol
+package types
 
 import (
-    // "log"
-    cassie "github.com/osallou/cassiopee-go"
+	// "log"
+	cassie "github.com/osallou/cassiopee-go"
 )
 
-type CassieSearchOptions struct{
-    Mode int
-    MaxSubst int
-    MaxIndel int
-    Ambiguity bool
+type CassieSearchOptions struct {
+	Mode      int
+	MaxSubst  int
+	MaxIndel  int
+	Ambiguity bool
 }
 
 type Cassie struct {
-    Indexer cassie.CassieIndexer
-    Searcher cassie.CassieSearch
-    PLen int
+	Indexer  cassie.CassieIndexer
+	Searcher cassie.CassieSearch
+	PLen     int
 }
 
 func NewCassieManager() Cassie {
-    return Cassie{}
+	return Cassie{}
 }
-
 
 /*
 func (c Cassie) GetIndexer(sequence string) {

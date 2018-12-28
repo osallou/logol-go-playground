@@ -1,4 +1,4 @@
-package logol
+package types
 
 import (
 	"gopkg.in/yaml.v2"

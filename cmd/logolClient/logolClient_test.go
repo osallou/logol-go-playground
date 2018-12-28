@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	//"fmt"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -22,7 +21,7 @@ func stop(t transport.Transport) {
 	event := transport.MsgEvent{}
 	event.Step = transport.STEP_END
 	t.SendEvent(event)
-	os.Remove("logol." + t.GetId() + ".out")
+	os.Remove("logol." + t.GetID() + ".out")
 }
 
 func startGrammar(resChan chan [][]logol.Match, grammarFile string) [][]logol.Match {

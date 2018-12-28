@@ -1,6 +1,7 @@
-// Manage input messages
-
-package logol
+// Package message manage input messages received from transport
+//
+// For each message, it will try to find a match and will send a new message to find next workflow component
+package message
 
 import (
 	"encoding/json"
@@ -548,7 +549,7 @@ func (m msgManager) handleYetToBeDefined(result logol.Result, model string, mode
 	for match := range matchChannel {
 		match.Uid = matchToAnalyse.Uid
 		nbMatches++
-		m.SearchUtils.UpdateByUid(match, result.Matches)
+		m.SearchUtils.UpdateByUID(match, result.Matches)
 		// update result contextVars (all array elements) with match if defined
 		for cv := 0; cv < len(result.ContextVars); cv++ {
 			for key, value := range result.ContextVars[cv] {

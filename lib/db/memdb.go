@@ -1,4 +1,5 @@
-package logol
+// Package db offer different database implementations used by transports
+package db
 
 import (
 	"sync"

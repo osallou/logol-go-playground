@@ -1,4 +1,4 @@
-package logol
+package utils
 
 // Version gets software version
 var Version string

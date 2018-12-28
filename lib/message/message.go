@@ -1,8 +1,6 @@
-package logol
+package message
 
 import (
-	//"log"
-	//"fmt"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,13 +8,9 @@ import (
 	"time"
 
 	logs "github.com/osallou/logol-go-playground/lib/log"
-	logol "github.com/osallou/logol-go-playground/lib/types"
-
-	// cassie "github.com/osallou/cassiopee-go"
 	seq "github.com/osallou/logol-go-playground/lib/sequence"
 	transport "github.com/osallou/logol-go-playground/lib/transport"
-	//redis "github.com/go-redis/redis"
-	//"github.com/satori/go.uuid"
+	logol "github.com/osallou/logol-go-playground/lib/types"
 )
 
 var logger = logs.GetLogger("logol.message")
@@ -188,7 +182,7 @@ func (m *MessageAnalyse) Close() {
 func (m *MessageAnalyse) HandleMessage(result logol.Result) (ok bool) {
 	//json_resmsg, _ := json.Marshal(result)
 	//logger.Infof("Handle analyse message %s", json_resmsg)
-	logger.Infof("Handle Analyse Message %s", result.Uid)
+	logger.Debugf("Handle Analyse Message %s", result.Uid)
 
 	if !m.msgLoaded {
 		t := transport.GetTransport(transport.QUEUE_MESSAGE)

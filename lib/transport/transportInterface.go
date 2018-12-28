@@ -1,4 +1,4 @@
-package logol
+package transport
 
 import (
 	"fmt"
@@ -132,7 +132,7 @@ func failOnError(err error, msg string) {
 // SetGrammar saves the grammar
 type Transport interface {
 	Init(uid string)
-	GetId() string
+	GetID() string
 	GetQueueStatus(queue QueueType) (pending int, consumers int)
 	GetProgress(uid string) (count int, ban int, match int)
 	AddBan(uid string, nb int64)

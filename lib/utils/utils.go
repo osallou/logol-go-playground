@@ -1,7 +1,7 @@
-package logol
+// PAckage utils define utilitary functions used in different packages
+package utils
 
 import (
-	//"log"
 	"bufio"
 	"encoding/json"
 	"fmt"
@@ -20,25 +20,28 @@ import (
 
 var logger = logs.GetLogger("logol.sequence.utils")
 
+/*
 const OPERATION_PLUS = 0
 const OPERATION_MINUS = 1
 const OPERATION_MULTIPLY = 2
 const OPERATION_DIVIDE = 3
 const OPERATION_PERCENT = 4
+*/
 
-const PROP_START = 0
-const PROP_END = 1
-const PROP_SUBST = 2
-const PROP_INDEL = 3
-const PROP_CONTENT = 4
-const PROP_SIZE = 5
+const propStart = 0
+const propEnd = 1
+const propSubst = 2
+const propIndel = 3
+const propContent = 4
+const propSize = 5
 
+// FilterOut removes matches to ban (related to negative model matches) and duplicate results
 func FilterOut(t transport.Transport, filePath string, toBan []string) (filtered int, duplicates int, nbMatch int) {
 	for i := 0; i < len(toBan); i++ {
 		logger.Debugf("Should ban: %s", toBan[i])
 	}
 
-	tmpfile, err := ioutil.TempFile("", t.GetId())
+	tmpfile, err := ioutil.TempFile("", t.GetID())
 	logger.Debugf("Write filtered file: %s", tmpfile.Name())
 	if err != nil {
 		log.Fatal(err)
@@ -101,7 +104,7 @@ func FilterOut(t transport.Transport, filePath string, toBan []string) (filtered
 	return filtered, duplicates, nbMatch
 }
 
-// Get size of global match
+// GetSize returns size of global match
 func GetSize(matches []logol.Match) int {
 	start := 0
 	end := 0
@@ -112,7 +115,7 @@ func GetSize(matches []logol.Match) int {
 	return end - start
 }
 
-// Find all vars name from an expression
+// GetVarNamesFromExpression find all vars name from an expression
 //
 // Example: @R1 + @@R2 + 3 will return R1,R2
 func GetVarNamesFromExpression(expr string) []string {
@@ -127,7 +130,7 @@ func GetVarNamesFromExpression(expr string) []string {
 	return result
 }
 
-// Find all vars reference from an expression
+// GetVarReferencesFromExpression find all vars reference from an expression
 //
 // Example: @R1 + @@R2 + 3 will return @R1,@@R2
 func GetVarReferencesFromExpression(expr string) []string {
@@ -169,9 +172,8 @@ func Evaluate(expr string, contextVars map[string]logol.Match) bool {
 	result, _ := expression.Evaluate(parameters)
 	if result == true {
 		return true
-	} else {
-		return false
 	}
+	return false
 }
 
 // Search variable in context variables and returns value matching selected property (start, end, cost, ...)
@@ -182,15 +184,15 @@ func getPropertyValueFromContext(property int, variable string, contextVars map[
 		return 0, true
 	}
 	switch property {
-	case PROP_START:
+	case propStart:
 		return ctxVar.Start, false
-	case PROP_END:
+	case propEnd:
 		return ctxVar.End, false
-	case PROP_SUBST:
+	case propSubst:
 		return ctxVar.Sub, false
-	case PROP_INDEL:
+	case propIndel:
 		return ctxVar.Indel, false
-	case PROP_SIZE:
+	case propSize:
 		return ctxVar.End - ctxVar.Start, false
 	}
 	return 0, false
@@ -202,22 +204,22 @@ func getPropertyValueFromContext(property int, variable string, contextVars map[
 func getProperty(expr string) (prop int, variable string, err bool) {
 	exprLen := len(expr)
 	if exprLen > 2 && expr[0:2] == "@@" {
-		return PROP_END, expr[2:len(expr)], false
+		return propEnd, expr[2:len(expr)], false
 	}
 	if exprLen > 1 && expr[0:1] == "@" {
-		return PROP_START, expr[1:len(expr)], false
+		return propStart, expr[1:len(expr)], false
 	}
 	if exprLen > 2 && expr[0:2] == "$$" {
-		return PROP_INDEL, expr[2:len(expr)], false
+		return propIndel, expr[2:len(expr)], false
 	}
 	if exprLen > 1 && expr[0:1] == "$" {
-		return PROP_SUBST, expr[1:len(expr)], false
+		return propSubst, expr[1:len(expr)], false
 	}
 	if exprLen > 1 && expr[0:1] == "?" {
-		return PROP_CONTENT, expr[1:len(expr)], false
+		return propContent, expr[1:len(expr)], false
 	}
 	if exprLen > 1 && expr[0:1] == "#" {
-		return PROP_SIZE, expr[1:len(expr)], false
+		return propSize, expr[1:len(expr)], false
 	}
 	return 0, "", true
 }
@@ -238,7 +240,7 @@ func getValueFromExpression(expr string, contextVars map[string]logol.Match) (va
 	return getPropertyValueFromContext(prop, variable, contextVars)
 }
 
-// Search if variable constraints refer to a variable not available in context variables
+// HasUndefineContentVar search if variable constraints refer to a variable not available in context variables
 //
 // If some variables not yet defined are found, returns list of variable names and value true, else return false
 func HasUndefineContentVar(variable string, contextVars map[string]logol.Match) (hasUndefined bool, undefinedVars []string, knownVars []string) {
@@ -263,7 +265,7 @@ func HasUndefineContentVar(variable string, contextVars map[string]logol.Match) 
 	return hasUndefined, undefinedVars, knownVars
 }
 
-// check if an operation contains unknown or not defined variables
+// HasUndefinedRangeVars check if an operation contains unknown or not defined variables
 func HasUndefinedRangeVars(expr string, contextVars map[string]logol.Match) (hasUndefined bool, undefinedVars []string, knownVars []string) {
 	hasUndefined = false
 	undefinedVars = make([]string, 0)
@@ -316,7 +318,7 @@ func HasUndefinedRangeVars(expr string, contextVars map[string]logol.Match) (has
 	return hasUndefined, undefinedVars, knownVars
 }
 
-// Calculate expression
+// GetRangeValue calculate expression
 //
 // Examples: 12 , 1 + @R1 , @R1 * @R2, etc.
 func GetRangeValue(expr string, contextVars map[string]logol.Match) (val int, err bool) {
@@ -335,32 +337,32 @@ func GetRangeValue(expr string, contextVars map[string]logol.Match) (val int, er
 		}
 		return val, false
 
-	} else {
-		if len(elts) != 3 {
-			logger.Debugf("Invalid operation %s", expr)
-			return 0, true
-		}
-		val1, err1 := getValueFromExpression(elts[0], contextVars)
-		val2, err2 := getValueFromExpression(elts[2], contextVars)
-		if err1 || err2 {
-			logger.Debugf("Invalid operation %s", expr)
-			return 0, true
-		}
-		switch elts[1] {
-		case "+":
-			return val1 + val2, false
-		case "-":
-			return val1 - val2, false
-		case "*":
-			return val1 * val2, false
-		case "/":
-			return val1 / val2, false
-		}
 	}
+	if len(elts) != 3 {
+		logger.Debugf("Invalid operation %s", expr)
+		return 0, true
+	}
+	val1, err1 := getValueFromExpression(elts[0], contextVars)
+	val2, err2 := getValueFromExpression(elts[2], contextVars)
+	if err1 || err2 {
+		logger.Debugf("Invalid operation %s", expr)
+		return 0, true
+	}
+	switch elts[1] {
+	case "+":
+		return val1 + val2, false
+	case "-":
+		return val1 - val2, false
+	case "*":
+		return val1 * val2, false
+	case "/":
+		return val1 / val2, false
+	}
+
 	return 0, false
 }
 
-// Check the percentage of alphabet in input sequence against input percent
+// CheckAlphabetPercent check the percentage of alphabet in input sequence against input percent
 //
 // alphabet is a string of chars to be found in sequence. Function counts them vs number of characters in sequence.
 // It then compares the found percentage against input percent expecting a higher value

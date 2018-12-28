@@ -1,4 +1,5 @@
-package logol
+// Package types defines the different objects used in logol (grammar, match, etc.)
+package types
 
 import (
 	"log"
@@ -16,12 +17,14 @@ type Morphism struct {
 }
 
 type ParamDef struct {
+	Comment string
 	Inputs  []string
 	Outputs []string
 }
 
 type VariableModel struct {
 	Name          string
+	Comment       string
 	Param         []string
 	RepeatMin     int
 	RepeatMax     int
@@ -33,6 +36,7 @@ type RangeConstraint struct {
 	Max string
 }
 type StringConstraint struct {
+	Comment  string
 	Content  string
 	SaveAs   string
 	Size     RangeConstraint
@@ -42,6 +46,7 @@ type StringConstraint struct {
 	Reverse  bool
 }
 type StructConstraint struct {
+	Comment  string
 	Cost     RangeConstraint // range [3,4]
 	Distance RangeConstraint // range [10,20]
 	Percent  string          // ac:80 80% of ac
@@ -54,6 +59,7 @@ type NegConstraint struct {
 	Struct_constraints StructConstraint
 }
 type Variable struct {
+	Comment              string
 	Value                string
 	Next                 []string
 	Model                VariableModel
@@ -76,9 +82,11 @@ type MainModel struct {
 	Model   string
 	Param   []string
 	Nomatch string // Id of the variable the model should not match
+	Comment string
 }
 
 type Grammar struct {
+	Comment   string
 	Options   map[string]int64
 	Morphisms map[string]Morphism
 	Models    map[string]Model

@@ -1,11 +1,10 @@
-package logol
+package sequence
 
 import (
 	"strings"
-	//"log"
-	//logol "org.irisa.genouest/logol/lib/types"
 )
 
+// BioString is an interface to manage biological sequences (dna, protein, ..)
 type BioString interface {
 	GetValue() string
 	SetValue(string)
@@ -17,24 +16,31 @@ type BioString interface {
 	SetMorphisms(map[string][]string)
 }
 
+// DnaString defined a DNA sequence with optional allowed morphisms
 type DnaString struct {
 	Value string
 	// List of morphisms ("a" -> "cg", "g" -> "t",...)
 	AllowedMorphisms map[string][]string
 }
 
+// NewDnaString returns an instance of DnaString for input string
 func NewDnaString(value string) (ds DnaString) {
 	ds = DnaString{}
 	ds.Value = value
 	return ds
 }
 
+// GetValue returns DNA string
 func (s DnaString) GetValue() string {
 	return s.Value
 }
+
+// SetValue sets DNA string
 func (s *DnaString) SetValue(str string) {
 	s.Value = str
 }
+
+// getMorhpism returns all the morphisms for the string
 func (s DnaString) getMorphism(ch chan string, part string, index int) {
 	sLen := len(part)
 	if index >= sLen {
@@ -56,7 +62,7 @@ func (s DnaString) getMorphism(ch chan string, part string, index int) {
 	}
 }
 
-// Get all possible conversions with defined morphism
+// GetMorphisms get all possible conversions with defined morphism
 func (s DnaString) GetMorphisms(ch chan string) {
 	if s.AllowedMorphisms == nil {
 		logger.Debugf("No morphisms defined")
@@ -68,10 +74,12 @@ func (s DnaString) GetMorphisms(ch chan string) {
 	close(ch)
 }
 
+// SetMorphisms sets allowed morphisms
 func (s *DnaString) SetMorphisms(m map[string][]string) {
 	s.AllowedMorphisms = m
 }
 
+// Complement returns the dna complement of the string
 func (s DnaString) Complement() string {
 	complement := ""
 	sLen := len(s.Value)
@@ -91,6 +99,7 @@ func (s DnaString) Complement() string {
 	return s.Value
 }
 
+// Reverse reverse a string
 func (s DnaString) Reverse() string {
 	reverse := ""
 	sLen := len(s.Value)
@@ -101,6 +110,7 @@ func (s DnaString) Reverse() string {
 	return s.Value
 }
 
+// IsExact checks if both strings are equal with allowed morphisms
 func (s DnaString) IsExact(s2 string) bool {
 	chain1 := strings.ToLower(s.Value)
 	chain2 := strings.ToLower(s2)
@@ -126,7 +136,6 @@ func (s DnaString) IsExact(s2 string) bool {
 				return false
 			}
 		} else {
-			// logger.Debugf("##COMPARE %s vs %s", chain1[i], chain2[i])
 			if chain1[i:i+1] == "n" || chain2Char == "n" {
 				continue
 			} else if chain1[i] != chain2[i] {
@@ -137,10 +146,12 @@ func (s DnaString) IsExact(s2 string) bool {
 	return true
 }
 
+// IsApproximate checks if string are equal with possible errors
 func (s DnaString) IsApproximate(s2 string, subst int, indel int) (bool, int, int) {
 	return true, 0, 0
 }
 
+// IsBioExact checks if strings are equals (with allowed mutations)
 func IsBioExact(b1 BioString, b2 string) bool {
 	return b1.IsExact(b2)
 }

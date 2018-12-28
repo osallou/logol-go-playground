@@ -189,8 +189,13 @@ func main() {
 	stats := t.GetStats(data.Uid)
 
 	jsonStats, _ := json.Marshal(stats)
-	log.Printf("Stats: %s", jsonStats)
+	logger.Debugf("Stats: %s", jsonStats)
 	utils.WriteFlowPlots(data.Uid, stats.Flow, stats.Duration)
+	doStatsEnv := os.Getenv("LOGOL_STATS")
+	if doStatsEnv != "" {
+		log.Printf("Stat dot file: %s", "logol-"+data.Uid+".stats.dot")
+	}
+
 	outFilePath := "logol." + uid + ".out"
 	if outfile != "" {
 		outFilePath = outfile
